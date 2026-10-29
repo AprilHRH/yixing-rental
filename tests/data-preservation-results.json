@@ -1,0 +1,12 @@
+{
+  "business_records_unchanged_from_pre_upgrade_database": true,
+  "counts": {
+    "vehicles": 18,
+    "customers": 9,
+    "orders": 30,
+    "payments": 30,
+    "dispatch": 1,
+    "maintenance": 9
+  },
+  "account_change": "STAFF promoted to ADMIN role with STAFF account_type; existing credentials preserved"
+}

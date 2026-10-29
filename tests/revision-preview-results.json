@@ -1,0 +1,16 @@
+{
+  "url": "http://127.0.0.1:5173",
+  "source": "built production preview, real persistent business database",
+  "checks": [
+    "工作台 1451/1280/768/390px 无整页溢出、图片加载正常",
+    "维修保养 1451/1280/768/390px 无整页溢出、图片加载正常",
+    "车辆调度 1451/1280/768/390px 无整页溢出、图片加载正常",
+    "租金计算 1451/1280/768/390px 无整页溢出、图片加载正常",
+    "统计报表 1451/1280/768/390px 无整页溢出、图片加载正常",
+    "系统管理 1451/1280/768/390px 无整页溢出、图片加载正常"
+  ],
+  "business_data_unchanged": true,
+  "errors": [],
+  "failed_resources": [],
+  "note": "Customer registration form previewed without submitting; full customer workflows run against isolated H2 in browser_acceptance.py"
+}

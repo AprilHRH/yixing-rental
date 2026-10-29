@@ -1,0 +1,6 @@
+{
+  "name": "yixing-rental-frontend", "version": "1.0.0", "private": true, "type": "module",
+  "scripts": { "dev": "vite --host 127.0.0.1", "build": "vite build", "preview": "vite preview --host 127.0.0.1", "test": "node --test src/dashboard.test.js" },
+  "dependencies": { "vue": "^3.5.13", "vue-router": "^4.5.0", "element-plus": "^2.9.0", "@element-plus/icons-vue": "^2.3.1", "axios": "^1.8.4", "echarts": "^5.6.0" },
+  "devDependencies": { "vite": "^6.3.5", "@vitejs/plugin-vue": "^5.2.4" }
+}

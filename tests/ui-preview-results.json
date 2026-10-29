@@ -1,0 +1,43 @@
+{
+  "order_checks": [
+    "18张车辆素材均为真实透明通道、统一960×520画布与前侧朝左视角",
+    "订单四项统计数值与接口一致，使用四种区分色及加粗数字字体",
+    "全部30笔订单逐页核对：每行均有对应车辆图片、品牌车型及业务车牌",
+    "订单详情与新建订单车辆选择器复用透明车辆图，未提交或修改业务记录",
+    "订单页1440/768/390px无整页横向溢出，表格保留独立横向滚动"
+  ],
+  "vehicle_checks": [
+    "18辆车辆两页图片加载成功，品牌、车型、车牌与业务记录一一对应",
+    "车辆档案与列表复用同一图片，卡片支持键盘Enter查看详情",
+    "车辆页1440/768/390px无整页溢出，已删除门店下拉筛选"
+  ],
+  "url": "http://127.0.0.1:5173",
+  "source": "built production preview; existing persistent database",
+  "business_data_unchanged": true,
+  "keyboard_filter": "Tab and Enter verified",
+  "photography": "local WebP assets; login and dashboard loaded",
+  "task_photos": "vehicle records first, clearly labeled local model references as fallback; loaded",
+  "homepage_footer": "removed from DOM",
+  "chart_canvas": "centered fleet donut, lower legend and revenue bars rendered",
+  "design_reference": "updated user direction; photographic blue-slate navigation, clear blue-white surfaces and burnt-orange actions",
+  "mobile": "390px; responsive order cards; no page overflow",
+  "browser_errors": [],
+  "failed_resources": [],
+  "screenshots": [
+    "ui-login-final.png",
+    "ui-dashboard-final.png",
+    "ui-dispatch-final.png",
+    "ui-vehicles-final.png",
+    "ui-vehicles-page-2.png",
+    "ui-vehicles-viewport.png",
+    "ui-vehicle-detail-final.png",
+    "ui-vehicles-mobile-final.png",
+    "ui-orders-final.png",
+    "ui-order-detail-final.png",
+    "ui-order-vehicle-picker.png",
+    "ui-orders-mobile-final.png",
+    "vehicle-photo-catalog.png",
+    "ui-mobile-final.png"
+  ],
+  "video": "video/ui-operations-walkthrough-20261029-082004.webm"
+}
