@@ -1,0 +1,169 @@
+{
+  "captured_at": "2026-10-29T08:47:24",
+  "source": "Current production build and existing persistent database; read-only capture, no fabricated records",
+  "unchanged_business_data": true,
+  "screenshots": [
+    {
+      "file": "login.png",
+      "url": "http://127.0.0.1:5173/#/login",
+      "viewport": {
+        "width": 1451,
+        "height": 900
+      }
+    },
+    {
+      "file": "customer-login.png",
+      "url": "http://127.0.0.1:5173/#/login",
+      "viewport": {
+        "width": 1451,
+        "height": 900
+      }
+    },
+    {
+      "file": "registration.png",
+      "url": "http://127.0.0.1:5173/#/login",
+      "viewport": {
+        "width": 1451,
+        "height": 900
+      }
+    },
+    {
+      "file": "dashboard.png",
+      "url": "http://127.0.0.1:5173/#/",
+      "viewport": {
+        "width": 1451,
+        "height": 900
+      }
+    },
+    {
+      "file": "dashboard-full.png",
+      "url": "http://127.0.0.1:5173/#/",
+      "viewport": {
+        "width": 1451,
+        "height": 900
+      }
+    },
+    {
+      "file": "vehicles.png",
+      "url": "http://127.0.0.1:5173/#/vehicles",
+      "viewport": {
+        "width": 1451,
+        "height": 900
+      }
+    },
+    {
+      "file": "customers.png",
+      "url": "http://127.0.0.1:5173/#/customers",
+      "viewport": {
+        "width": 1451,
+        "height": 900
+      }
+    },
+    {
+      "file": "orders.png",
+      "url": "http://127.0.0.1:5173/#/orders",
+      "viewport": {
+        "width": 1451,
+        "height": 900
+      }
+    },
+    {
+      "file": "order-detail.png",
+      "url": "http://127.0.0.1:5173/#/orders",
+      "viewport": {
+        "width": 1451,
+        "height": 900
+      }
+    },
+    {
+      "file": "pricing.png",
+      "url": "http://127.0.0.1:5173/#/pricing",
+      "viewport": {
+        "width": 1451,
+        "height": 900
+      }
+    },
+    {
+      "file": "pricing-monthly.png",
+      "url": "http://127.0.0.1:5173/#/pricing",
+      "viewport": {
+        "width": 1451,
+        "height": 900
+      }
+    },
+    {
+      "file": "dispatch.png",
+      "url": "http://127.0.0.1:5173/#/dispatch",
+      "viewport": {
+        "width": 1451,
+        "height": 900
+      }
+    },
+    {
+      "file": "maintenance.png",
+      "url": "http://127.0.0.1:5173/#/maintenance",
+      "viewport": {
+        "width": 1451,
+        "height": 900
+      }
+    },
+    {
+      "file": "reports.png",
+      "url": "http://127.0.0.1:5173/#/reports",
+      "viewport": {
+        "width": 1451,
+        "height": 900
+      }
+    },
+    {
+      "file": "report-usage.png",
+      "url": "http://127.0.0.1:5173/#/reports",
+      "viewport": {
+        "width": 1451,
+        "height": 900
+      }
+    },
+    {
+      "file": "settings.png",
+      "url": "http://127.0.0.1:5173/#/settings",
+      "viewport": {
+        "width": 1451,
+        "height": 900
+      }
+    },
+    {
+      "file": "settings-parameters.png",
+      "url": "http://127.0.0.1:5173/#/settings",
+      "viewport": {
+        "width": 1451,
+        "height": 900
+      }
+    },
+    {
+      "file": "mobile-dashboard.png",
+      "url": "http://127.0.0.1:5173/#/",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "file": "mobile-vehicles.png",
+      "url": "http://127.0.0.1:5173/#/vehicles",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "file": "mobile-orders.png",
+      "url": "http://127.0.0.1:5173/#/orders",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    }
+  ],
+  "page_errors": [],
+  "failed_resources": []
+}
