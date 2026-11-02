@@ -2,7 +2,9 @@
 node_modules/
 frontend/dist/
 backend/target/
-data/
+/data/
+# 实训资料和报告只保留在本地，不提交到代码仓库。
+/26下半软件实训/
 uploads/
 *.log
 .env

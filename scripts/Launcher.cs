@@ -91,6 +91,7 @@ internal sealed class RentalLauncher : Form
 
     private void Dispatch(Action action)
     {
+        // 后台进程的消息要转回界面线程，不能直接在后台线程修改按钮和日志框。
         if (!IsDisposed && IsHandleCreated)
             BeginInvoke(action);
     }
@@ -100,6 +101,7 @@ internal sealed class RentalLauncher : Form
         if (String.IsNullOrEmpty(text)) return;
         if (text.StartsWith("::ready::"))
         {
+            // Python 启动脚本会说明服务是否归本窗口管理，复用的外部服务不能被停止。
             ready = true;
             bool owned = text.EndsWith("owned");
             status.Text = owned ? "运行中 · 可通过本窗口停止本次服务" : "系统已在运行 · 已连接，不接管原有服务";
@@ -131,6 +133,7 @@ internal sealed class RentalLauncher : Form
 
     private void StartSystem()
     {
+        // 窗口负责交互，环境检查、构建和服务生命周期交给 scripts/run.py。
         if (runner != null) return;
         try
         {
@@ -191,6 +194,7 @@ internal sealed class RentalLauncher : Form
 
     private void StopSystem()
     {
+        // 发送停止指令，让 Python 只清理它自己启动的进程。
         if (runner == null) return;
         try
         {

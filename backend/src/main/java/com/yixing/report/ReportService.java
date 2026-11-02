@@ -18,9 +18,11 @@ public class ReportService {
         try { startDate = LocalDate.parse(from); endDate = LocalDate.parse(to); }
         catch (Exception exception) { throw new com.yixing.common.BusinessException("统计日期格式不正确"); }
         require(!endDate.isBefore(startDate) && Duration.between(startDate.atStartOfDay(), endDate.atStartOfDay()).toDays() <= 366, "统计区间须为 1 至 367 天");
+        // 查询含开始日和结束日：用“开始日零点 <= 时间 < 结束日次日零点”覆盖最后一天。
         LocalDateTime start = startDate.atStartOfDay(), end = endDate.plusDays(1).atStartOfDay();
         List<Map<String, Object>> orders = store.list("rental_order"), vehicles = store.list("vehicle"), work = store.list("maintenance_record");
         Map<String, Map<String, Object>> trend = new LinkedHashMap<>();
+        // 没有业务的日期也补零，折线图才不会跳过空白日期。
         for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) trend.put(date.toString(), map("date", date.toString(), "revenue", BigDecimal.ZERO, "orders", 0));
         BigDecimal revenue = BigDecimal.ZERO, costs = BigDecimal.ZERO;
         long created = 0, completed = 0, cancelled = 0;
@@ -31,6 +33,7 @@ public class ReportService {
                 created++; String day = text(order, "created_at").substring(0, 10); Map<String, Object> point = trend.get(day); point.put("orders", ((Number) point.get("orders")).intValue() + 1);
             }
             if ("COMPLETED".equals(text(order, "status")) && inside(order, "completed_at", start, end)) {
+                // 收入按结算时间统计最终租金，不把可退押金或尚未结算的预付款算作收入。
                 completed++; BigDecimal amount = money(order, "actual_rent"); revenue = revenue.add(amount);
                 Map<String, Object> vehicleUsage = usage.get(number(order, "vehicle_id"));
                 vehicleUsage.put("revenue", ((BigDecimal) vehicleUsage.get("revenue")).add(amount));
@@ -42,6 +45,7 @@ public class ReportService {
                 if (inside(order, "actual_start", start, end)) item.put("count", ((Number) item.get("count")).longValue() + 1);
                 LocalDateTime pickup = time(order, "actual_start");
                 LocalDateTime returned = text(order, "actual_end").isBlank() ? LocalDateTime.now() : time(order, "actual_end");
+                // 跨越统计区间的租赁只计算区间内的使用时长，未还车则暂算到当前时间。
                 LocalDateTime clippedStart = pickup.isAfter(start) ? pickup : start, clippedEnd = returned.isBefore(end) ? returned : end;
                 if (clippedEnd.isAfter(clippedStart)) item.put("hours", ((Number) item.get("hours")).doubleValue() + Duration.between(clippedStart, clippedEnd).toSeconds() / 3600.0);
             }

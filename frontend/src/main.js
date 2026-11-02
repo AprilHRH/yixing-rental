@@ -37,6 +37,7 @@ const router = createRouter({ history: createWebHashHistory(), routes: [
   { path: '/settings', component: Settings, meta: { title: '系统管理', subtitle: '统一管理账号、门店与系统参数。', group: '系统管理', admin: true } },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ] })
+// 导航守卫负责让用户进入合适的页面，真正的数据权限仍由后端检查。
 router.beforeEach(to => {
   if (!state.user && to.path !== '/login') return '/login'
   if (state.user && to.path === '/login') return state.user.role === 'CUSTOMER' ? '/portal' : '/'
@@ -46,6 +47,7 @@ router.beforeEach(to => {
 })
 window.addEventListener('auth:expired', () => { state.user = null; router.push('/login') })
 async function start() {
+  // 先恢复服务器登录状态，再显示页面，刷新浏览器时不会误跳转到错误的入口。
   try { state.user = await api.get('/auth/me', { silent: true }) } catch { state.user = null }
   createApp(App).use(router).use(ElementPlus, { locale: zhCn }).mount('#app')
 }

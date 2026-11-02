@@ -14,7 +14,7 @@ import static com.yixing.common.Values.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 
-@SpringBootTest(properties = {"spring.datasource.url=jdbc:h2:mem:portaltest;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1", "spring.main.banner-mode=off"})
+@SpringBootTest(properties = {"spring.datasource.url=${TEST_PORTAL_DATABASE_URL:jdbc:h2:mem:portaltest;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1}", "spring.main.banner-mode=off"})
 @AutoConfigureMockMvc
 class CustomerPortalTest {
     @Autowired MockMvc mvc;

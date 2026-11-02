@@ -11,6 +11,7 @@ import static com.yixing.common.Values.*;
 
 @Component
 public class SessionFilter extends OncePerRequestFilter {
+    // 恢复备份后递增版本号，让恢复前的登录全部失效，避免继续使用旧身份或旧权限。
     private static final java.util.concurrent.atomic.AtomicLong EPOCH = new java.util.concurrent.atomic.AtomicLong(1);
     @org.springframework.beans.factory.annotation.Value("${app.allowed-origins:http://127.0.0.1:5173,http://localhost:5173,http://127.0.0.1:8080,http://localhost:8080}")
     private String allowedOrigins;
@@ -26,6 +27,7 @@ public class SessionFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws ServletException, IOException {
         String path = request.getRequestURI();
         if (!path.startsWith("/api/")) { chain.doFilter(request, response); return; }
+        // 写操作要求前端专用请求头，并检查来源，拦截不符合约定的跨站请求。
         if (!"GET".equals(request.getMethod()) && !"XMLHttpRequest".equals(request.getHeader("X-Requested-With"))) {
             fail(response, 403, "请求来源不可信"); return;
         }
@@ -37,10 +39,12 @@ public class SessionFilter extends OncePerRequestFilter {
         HttpSession session = request.getSession(false);
         if (session == null || session.getAttribute("userId") == null || !Long.valueOf(epoch()).equals(session.getAttribute("epoch"))) { fail(response, 401, "请先登录"); return; }
         Map<String, Object> user;
+        // 每次请求都重读账号，管理员停用账号或修改权限后无需等待会话自然过期。
         try { user = store.get("sys_user", ((Number) session.getAttribute("userId")).longValue()); }
         catch (Exception exception) { fail(response, 401, "登录状态已失效"); return; }
         if (!flag(user, "enabled")) { session.invalidate(); fail(response, 401, "账号已停用"); return; }
         request.setAttribute("user", user);
+        // 权限在服务器上判断。即使客户手动输入管理端接口地址，也不能读取管理数据。
         if ("CUSTOMER".equals(text(user, "role")) && !path.startsWith("/api/portal/") && !java.util.Set.of("/api/auth/me", "/api/auth/logout", "/api/auth/password").contains(path)) {
             fail(response, 403, "客户账号不能访问管理端数据"); return;
         }

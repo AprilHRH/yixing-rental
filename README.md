@@ -94,7 +94,29 @@ GitHub 仓库：https://github.com/AprilHRH/yixing-rental（私有，需要仓�
 
 ## 四、数据库说明
 
-### 默认模式：本地 H2 持久化
+### 当前电脑：本地 MySQL
+
+当前电脑已配置项目专用 MySQL 8.4.13，监听 `127.0.0.1:3307`，不安装 Windows 服务、不设开机启动、不开放外网。数据库文件位于 `data/mysql/db`，本机随机密码位于已限制访问权限且不提交 Git 的 `data/mysql/local.json`。
+
+桌面启动器和 `python scripts/run.py` 检测到上述配置后自动使用 MySQL；其他电脑没有该配置时仍使用 H2。数据库进程独立于前后端运行，关闭页面或停止前后端不会关闭数据库。
+
+```powershell
+python scripts/local_mysql.py start
+python scripts/local_mysql.py status
+python scripts/local_mysql.py stop
+```
+
+停止数据库前应先停止项目后端。需要切回保留的旧 H2 数据时，先停止前后端，再执行 `python scripts/run.py --h2`。两边后续写入互不自动同步。
+
+2026-10-30 已在真实 MySQL 下通过后端测试 15 项（12 项数据库集成、3 项计费单元测试）及浏览器验收 53 项，浏览器脚本错误为零；包含并发预约、交还车、收退款、调度维修、客户权限及备份恢复。原 H2 数据已复制到 MySQL，核对了全部业务表字段，迁移备份与核对结果保存在 `data/mysql/`，原 H2 文件保留。MySQL 停止后重启，31 笔订单与 18 辆车辆仍在。
+
+复测使用独立数据库，不改主演示数据：
+
+```powershell
+python scripts/test_mysql.py
+```
+
+### 保留模式：本地 H2 持久化
 
 为使当前没有 MySQL 服务的电脑也能直接运行，默认使用兼容 MySQL 模式的 H2 文件数据库。真实业务数据保存在根目录 `data/yixing.mv.db`，不是浏览器缓存，重启后仍然保留。
 
@@ -113,7 +135,7 @@ python scripts/run.py --mysql
 
 后端会读取 `application-mysql.properties`，使用单独的 MySQL 建表脚本初始化。H2 与 MySQL 数据互不自动迁移。
 
-**验证边界：当前完成了 H2 模式的集成及浏览器验收；MySQL 配置和结构脚本已提供，但未连接实际 MySQL 实例验证。**
+外部 MySQL 环境仍需单独验证连接、账号授权和字符集。本机测试结果不能替代服务器验收。
 
 ## 五、业务规则
 

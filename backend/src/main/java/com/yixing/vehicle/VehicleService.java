@@ -35,6 +35,7 @@ public class VehicleService {
         if (id == null) data.put("status", "AVAILABLE");
         else {
             Map<String, Object> previous = store.lock("vehicle", id);
+            // 档案编辑不能代替调度和取还车：门店需走调度流程，累计里程也不能回退。
             require(mileage >= number(previous, "mileage"), "车辆里程不能回退");
             require(number(input, "branch_id") == number(previous, "branch_id"), "请通过调度业务变更车辆门店");
             require("AVAILABLE".equals(text(previous, "status")) || mileage == number(previous, "mileage"), "非可用车辆不能手动修改里程");
@@ -44,6 +45,7 @@ public class VehicleService {
     }
     @Transactional
     public Map<String, Object> toggle(long id) {
+        // 停用不是删除：先处理完关联业务，保留历史订单和车辆档案供后续查询。
         access.admin(); Map<String, Object> vehicle = store.lock("vehicle", id);
         String status = text(vehicle, "status");
         require(Set.of("AVAILABLE", "DISABLED").contains(status), "只能停用空闲车辆或启用已停用车辆");

@@ -26,6 +26,7 @@ public class CustomerService {
         access.log(id == null ? "新增客户" : "编辑客户", text(result, "name")); return result;
     }
     public void eligible(Map<String, Object> customer, LocalDate endDate) {
+        // 驾驶证不仅今天要有效，还必须覆盖计划还车日；限制租赁的客户不能下单或取车。
         require(!flag(customer, "restricted"), "该客户已被限制租赁");
         require(!date(customer, "license_expiry").isBefore(endDate) && !date(customer, "license_expiry").isBefore(LocalDate.now()), "驾驶证已过期或无法覆盖租期");
     }

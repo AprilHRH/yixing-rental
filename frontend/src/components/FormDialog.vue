@@ -6,14 +6,17 @@ import VehicleIdentity from './VehicleIdentity.vue'
 const props = defineProps({ modelValue: Boolean, title: String, fields: Array, initial: Object, busy: Boolean, width: { type: Number, default: 660 } })
 const emit = defineEmits(['update:modelValue', 'submit'])
 const form = reactive({}), formRef = ref(null), uploading = ref(false)
+// 每次打开都从本次初始值重建表单，并清除上次的报错，避免不同记录之间串数据。
 watch(() => props.modelValue, value => { if (value) { Object.keys(form).forEach(key => delete form[key]); Object.assign(form, props.initial || {}); formRef.value?.clearValidate() } })
 const options = field => typeof field.options === 'function' ? field.options(form) : field.options || []
 const upload = async event => {
+  // 图片先上传得到服务器地址，业务记录里只保存地址，不保存浏览器本地文件路径。
   const file = event.target.files[0]
   if (!file) return
   uploading.value = true
   try { const data = new FormData(); data.append('file', file); const result = await api.post('/uploads', data); form.image = result.url } catch {} finally { uploading.value = false; event.target.value = '' }
 }
+// 校验通过后传出一份浅拷贝，父页面负责调用具体业务接口。
 async function submit() { if (await formRef.value.validate().catch(() => false)) emit('submit', { ...form }) }
 </script>
 <template>

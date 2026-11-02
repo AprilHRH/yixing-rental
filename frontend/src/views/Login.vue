@@ -11,6 +11,7 @@ const customerMode = computed(() => portal.value === 'CUSTOMER')
 function changePortal() { registering.value = false; formRef.value?.clearValidate(); form.username = ''; form.password = ''; form.confirm = '' }
 function account(type) { portal.value = 'ADMIN'; registering.value = false; form.username = type; form.password = type === 'admin' ? 'Admin@12345' : 'Staff@12345' }
 async function submit() {
+  // 同一表单支持客户注册和登录；注册成功不自动登录，需再次验证账号密码。
   if (!await formRef.value.validate().catch(() => false)) return
   if (registering.value && form.password !== form.confirm) return ElMessage.warning('两次输入的密码不一致')
   busy.value = true

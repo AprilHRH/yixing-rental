@@ -28,6 +28,7 @@ public class MaintenanceService {
         Map<String, Object> vehicle = store.lock("vehicle", vehicleId); task = store.lock("maintenance_record", id);
         switch (action) {
             case "start" -> {
+                // 待处理工单还没占用车辆；真正开工时要确认没有预约或调度，再改为维修中。
                 require("PENDING".equals(text(task, "status")) && "AVAILABLE".equals(text(vehicle, "status")), "车辆或工单状态不允许开始");
                 require(store.list("rental_order").stream().noneMatch(order -> number(order, "vehicle_id") == vehicleId && Set.of("RESERVED", "ACTIVE").contains(text(order, "status"))), "该车辆存在有效预约，请先处理订单");
                 require(store.list("dispatch_task").stream().noneMatch(dispatch -> number(dispatch, "vehicle_id") == vehicleId && Set.of("PENDING", "IN_PROGRESS").contains(text(dispatch, "status"))), "请先处理未完成调度任务");
@@ -35,6 +36,7 @@ public class MaintenanceService {
                 store.update("maintenance_record", id, map("status", "IN_PROGRESS", "started_at", now()));
             }
             case "complete" -> {
+                // 完工时同时登记实际费用、下次保养标准和车辆可用状态，避免信息不同步。
                 require("IN_PROGRESS".equals(text(task, "status")) && "MAINTENANCE".equals(text(vehicle, "status")), "仅维修中的工单可以完成");
                 LocalDate nextDate = date(input, "next_date"); long nextMileage = number(input, "next_mileage");
                 require(nextDate.isAfter(LocalDate.now()) && nextMileage > number(vehicle, "mileage"), "下次保养日期和里程必须晚于当前值");
@@ -49,6 +51,7 @@ public class MaintenanceService {
         access.log("维修操作 " + action, text(vehicle, "plate")); return store.get("maintenance_record", id);
     }
     public List<Map<String, Object>> reminders() {
+        // 日期或里程任一达到提醒阈值就提示；停用车和已经在维修中的车不重复提示。
         Map<String, Object> settings = store.get("settings", 1);
         Set<Long> activeWork = new HashSet<>();
         for (Map<String, Object> task : store.list("maintenance_record")) if ("IN_PROGRESS".equals(text(task, "status"))) activeWork.add(number(task, "vehicle_id"));

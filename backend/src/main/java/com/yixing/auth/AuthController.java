@@ -17,14 +17,17 @@ public class AuthController {
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
     public AuthController(Store store, Access access, AccountService accounts) { this.store = store; this.access = access; this.accounts = accounts; }
     public static Map<String, Object> publicUser(Map<String, Object> user) {
+        // 返回登录所需信息，不返回密码哈希，避免把整条账号记录暴露给浏览器。
         return map("id", user.get("id"), "name", user.get("name"), "username", user.get("username"), "role", user.get("role"), "enabled", user.get("enabled"), "account_type", user.get("account_type"), "customer_id", user.get("customer_id"));
     }
     @PostMapping("/login")
     public Map<String, Object> login(@RequestBody Map<String, Object> data, HttpServletRequest request) {
         String username = required(data, "username", 50);
         Map<String, Object> user = store.list("sys_user").stream().filter(entry -> username.equals(text(entry, "username"))).findFirst().orElse(null);
+        // BCrypt 校验输入密码与数据库哈希，不保存明文密码，也不能直接比较哈希字符串。
         require(user != null && flag(user, "enabled") && encoder.matches(text(data, "password"), text(user, "password_hash")), "账号、密码不正确或账号已停用");
         require(text(data, "portal").isBlank() || text(data, "portal").equals(text(user, "role")), "请选择正确的登录身份（管理员或客户）");
+        // 登录成功后换一个新会话，防止沿用登录前的会话编号。
         if (request.getSession(false) != null) request.getSession(false).invalidate();
         request.getSession(true).setAttribute("userId", user.get("id"));
         request.getSession().setAttribute("epoch", SessionFilter.epoch());
@@ -35,6 +38,7 @@ public class AuthController {
     @PostMapping("/logout") public Map<String, Object> logout(HttpServletRequest request) { request.getSession().invalidate(); return map("success", true); }
     @PostMapping("/password")
     public Map<String, Object> password(@RequestBody Map<String, Object> data, HttpServletRequest request) {
+        // 改密需验证原密码，保存新哈希后注销当前会话，要求重新登录。
         Map<String, Object> user = access.user();
         require(encoder.matches(text(data, "old_password"), text(user, "password_hash")), "原密码不正确");
         String password = required(data, "new_password", 64);

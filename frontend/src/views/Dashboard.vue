@@ -17,6 +17,7 @@ const taskTab = ref('all'), range = ref('week'), clock = ref(new Date())
 const greeting = computed(() => clock.value.getHours() < 12 ? '上午好' : clock.value.getHours() < 18 ? '下午好' : '晚上好')
 let timer, requestVersion = 0
 async function load() {
+  // 月度概览和近七天数据分别请求，单个请求失败不影响另一个；过期响应不覆盖新结果。
   const version = ++requestVersion
   reportLoading.value = true
   reportError.value = false
@@ -33,6 +34,7 @@ async function load() {
   reportLoading.value = false
 }
 onMounted(() => { load(); timer = setInterval(() => { clock.value = new Date() }, 30000) })
+// 离开工作台时停止时钟更新，并使尚未返回的请求失效。
 onBeforeUnmount(() => { clearInterval(timer); requestVersion++ })
 watch(() => state.orders, load)
 watch(() => dayKey(clock.value), load)

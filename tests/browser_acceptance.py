@@ -14,7 +14,7 @@ from revision_acceptance import verify_revision
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = 'http://127.0.0.1:5174'
-ARTIFACTS = ROOT / 'docs/previews'
+ARTIFACTS = Path(os.environ.get('BROWSER_ARTIFACTS', str(ROOT / 'docs/previews')))
 
 
 def wait_port(port, process):
@@ -59,7 +59,8 @@ def main():
         with (directory / 'backend.log').open('w', encoding='utf-8') as backend_log, (directory / 'frontend.log').open('w', encoding='utf-8') as frontend_log:
             try:
                 flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-                children.append(subprocess.Popen([java, '-jar', str(ROOT / 'backend/target/rental-system-1.0.0.jar'), '--server.port=8081', '--spring.datasource.url=jdbc:h2:mem:browser;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1', '--app.allowed-origins=' + BASE], cwd=directory, stdout=backend_log, stderr=subprocess.STDOUT, creationflags=flags))
+                database_url = os.environ.get('BROWSER_DATABASE_URL', 'jdbc:h2:mem:browser;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1')
+                children.append(subprocess.Popen([java, '-jar', str(ROOT / 'backend/target/rental-system-1.0.0.jar'), '--server.port=8081', '--spring.datasource.url=' + database_url, '--app.allowed-origins=' + BASE], cwd=directory, stdout=backend_log, stderr=subprocess.STDOUT, creationflags=flags))
                 environment = {**os.environ, 'FRONTEND_PORT': '5174', 'API_TARGET': 'http://127.0.0.1:8081'}
                 children.append(subprocess.Popen([node, str(ROOT / 'frontend/node_modules/vite/bin/vite.js')], cwd=ROOT / 'frontend', env=environment, stdout=frontend_log, stderr=subprocess.STDOUT, creationflags=flags))
                 wait_port(8081, children[0]); wait_port(5174, children[1])
@@ -168,8 +169,8 @@ def main():
                     results.append('业务人员与管理员使用同一完整工作台和经营报表')
                     assert not errors, errors
                     staff.close(); context.close(); browser.close()
-                report = {'passed': len(results), 'checks': results, 'browser_errors': errors, 'database': 'isolated in-memory H2; demo database unchanged'}
-                (ROOT / 'tests/browser-results.json').write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
+                report = {'passed': len(results), 'checks': results, 'browser_errors': errors, 'database': 'isolated MySQL; demo database unchanged' if database_url.startswith('jdbc:mysql:') else 'isolated in-memory H2; demo database unchanged'}
+                Path(os.environ.get('BROWSER_RESULTS', str(ROOT / 'tests/browser-results.json'))).write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
                 print(json.dumps(report, ensure_ascii=False, indent=2))
             except Exception:
                 print((directory / 'backend.log').read_text(encoding='utf-8', errors='replace')[-3000:])

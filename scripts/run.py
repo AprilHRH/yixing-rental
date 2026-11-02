@@ -15,6 +15,7 @@ import webbrowser
 
 ROOT = Path(__file__).resolve().parents[1]
 URL = 'http://127.0.0.1:5173/'
+# 访问本地服务时不走系统代理，避免代理软件影响启动状态检查。
 HTTP = build_opener(ProxyHandler({}))
 
 
@@ -35,6 +36,7 @@ def read_url(url):
 
 
 def backend_ready():
+    # 端口打开还不够，要收到本项目预期的“未登录”响应才认定后端已启动。
     status, body = read_url('http://127.0.0.1:8080/api/auth/me')
     try:
         return status == 401 and json.loads(body).get('message') == '请先登录'
@@ -52,6 +54,7 @@ def service_state():
 
 
 def resolve_tools():
+    # 优先使用项目 .tools 中的 JDK/Maven，找不到时再使用系统环境。
     tools = ROOT / '.tools'
     local_jdk = next((path for path in sorted(tools.glob('jdk*')) if (path / 'bin/java.exe').exists()), None)
     if local_jdk:
@@ -66,6 +69,7 @@ def resolve_tools():
 
 
 def terminate_owned(process):
+    # 只处理本启动器创建并记录的进程，不按端口强行关闭其他人的服务。
     if process.poll() is not None:
         return
     if os.name == 'nt':
@@ -115,6 +119,7 @@ class Runner:
                 reader.join(timeout=3)
 
     def prepare(self, tools, existing):
+        # 缺依赖才安装，缺构建产物或显式要求重建时才构建，减少日常启动等待。
         missing = []
         if not existing['backend'] and not tools['java']:
             missing.append('Java 21（安装后设置 JAVA_HOME）')
@@ -165,6 +170,7 @@ class Runner:
 
     def run(self):
         existing = service_state()
+        # 已有本项目服务可以复用；端口被其他程序占用时说明原因并停止启动。
         for name, port in [('backend', 8080), ('frontend', 5173)]:
             if occupied(port) and not existing[name]:
                 raise RuntimeError('端口 ' + str(port) + ' 被其他程序占用；请手动检查，不会自动关闭该程序。')
@@ -179,6 +185,7 @@ class Runner:
         tools = resolve_tools()
         self.runtime.mkdir(parents=True, exist_ok=True)
         with (self.runtime / 'startup.lock').open('a+b') as lock:
+            # 文件锁让两个启动器不能同时管理同一组服务，进程退出后由系统释放。
             if os.name == 'nt':
                 import msvcrt
                 lock.seek(0)
@@ -200,7 +207,15 @@ class Runner:
                 if not existing['backend']:
                     self.announce('正在启动后端服务……')
                     arguments = [tools['java'], '-jar', str(ROOT / 'backend/target/rental-system-1.0.0.jar')]
-                    if self.arguments.mysql:
+                    local_mysql = ROOT / 'data/mysql/local.json'
+                    # 已配置本地 MySQL 时自动选择它；显式 --h2 可回到旧数据环境。
+                    use_mysql = self.arguments.mysql or (local_mysql.exists() and not getattr(self.arguments, 'h2', False))
+                    if use_mysql and local_mysql.exists() and not os.environ.get('MYSQL_URL'):
+                        from local_mysql import ensure, environment
+                        config, version = ensure()
+                        os.environ.update(environment(config))
+                        self.announce('使用本机 MySQL ' + version + '（127.0.0.1:3307）。')
+                    if use_mysql:
                         arguments.append('--spring.profiles.active=mysql')
                     services.append(self.serve(arguments, ROOT, backend_log))
                 if not existing['frontend']:
@@ -225,6 +240,7 @@ class Runner:
                         raise RuntimeError('服务已退出，请查看 data/runtime 中的日志。')
 
     def close(self):
+        # 后启动的先关闭，既包括业务服务，也包括尚未结束的安装/构建进程。
         for process in reversed(self.children):
             terminate_owned(process)
 
@@ -235,11 +251,14 @@ def main():
     parser = argparse.ArgumentParser(description='易行租车快速启动')
     parser.add_argument('--build', action='store_true', help='测试并重新构建前后端')
     parser.add_argument('--mysql', action='store_true', help='使用配置的 MySQL 数据库')
+    parser.add_argument('--h2', action='store_true', help='使用原 H2 数据库，不自动选择本机 MySQL')
     parser.add_argument('--dev', action='store_true', help='使用前端热更新模式')
     parser.add_argument('--open', action='store_true', help='就绪后自动打开浏览器')
     parser.add_argument('--managed', action='store_true', help='由桌面启动器管理，stdin 接收 stop 指令')
     parser.add_argument('--check', action='store_true', help='只检查服务状态，不安装、启动或停止服务')
     arguments = parser.parse_args()
+    if arguments.mysql and arguments.h2:
+        parser.error('--mysql 与 --h2 不能同时使用')
     if arguments.check:
         status = service_state()
         print(json.dumps({'url': URL, 'ready': all(status.values()), **status}, ensure_ascii=False))

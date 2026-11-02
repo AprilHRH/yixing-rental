@@ -11,9 +11,11 @@ const form = reactive({ vehicle_id: state.vehicles[0]?.id, billing_mode: 'DAILY'
 const result = ref(null), busy = ref(false), selectedCar = computed(() => vehicle(form.vehicle_id)), selectedRule = computed(() => rule(selectedCar.value.pricing_id))
 watch(form, () => result.value = null)
 const monthlyStart = computed(() => `${year}-${String(form.month).padStart(2, '0')}-01T00:00:00`)
+// 月份只用来选起租日，结束日固定往后加 30 天，与后端包月计费规则保持一致。
 const monthlyEnd = computed(() => { const date = new Date(year, form.month - 1, 1); date.setDate(date.getDate() + 30); return localTime(date) })
 const unitPrice = computed(() => form.billing_mode === 'DAILY' ? selectedRule.value.daily_rate : form.billing_mode === 'MONTHLY' ? selectedRule.value.monthly_rate : selectedRule.value.mileage_rate)
 async function calculate() {
+  // 所有计费模式都交给后端试算；按里程时也传合法起止时间，但费用按公里数计算。
   if (!form.vehicle_id) return ElMessage.warning('请选择车辆')
   if (form.billing_mode === 'DAILY' && (!form.dates?.[0] || !form.dates?.[1] || form.dates[1] <= form.dates[0])) return ElMessage.warning('请选择租赁日期，还车日期须晚于取车日期')
   if (form.billing_mode === 'MILEAGE' && (!Number.isInteger(form.mileage) || form.mileage < 0)) return ElMessage.warning('请输入 0 至 1000000 的整数公里数')

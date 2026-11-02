@@ -9,6 +9,7 @@ import VehicleThumbnail from '../components/VehicleThumbnail.vue'
 import VehicleIdentity from '../components/VehicleIdentity.vue'
 import StatusTag from '../components/StatusTag.vue'
 const route = useRoute(), router = useRouter(), search = ref(''), category = ref(''), orderStatus = ref(''), booking = ref(null), detail = ref(null), busy = ref(false), quote = ref(null), formRef = ref(null), profileRef = ref(null)
+// 选车、本人订单和个人资料复用页面，当前路径决定显示哪块内容。
 const view = computed(() => route.path.endsWith('/orders') ? 'orders' : route.path.endsWith('/profile') ? 'profile' : 'cars')
 const profile = reactive({}), form = reactive({ planned_start: '', planned_end: '', billing_mode: 'DAILY', expected_mileage: 0, return_branch: null })
 const cars = computed(() => state.vehicles.filter(car => ['AVAILABLE', 'RENTED'].includes(car.status) && (!category.value || category.value === car.category) && (!search.value || `${car.brand}${car.model}${car.plate}`.toLowerCase().includes(search.value.toLowerCase()))))
@@ -16,11 +17,13 @@ const categories = computed(() => [...new Set(state.vehicles.map(car => car.cate
 const orders = computed(() => state.orders.filter(order => !orderStatus.value || order.status === orderStatus.value))
 const required = label => [{ required: true, message: '请填写' + label, trigger: ['blur', 'change'] }]
 watch(() => state.customers[0], customer => { if (customer) Object.assign(profile, customer) }, { immediate: true })
+// 表单一变，旧报价就不能继续展示，需按新条件重新试算。
 watch(form, () => quote.value = null)
 function reserve(car) { booking.value = car; Object.assign(form, { planned_start: localTime(new Date(Date.now() + 3600000)), planned_end: localTime(new Date(Date.now() + 3600000 + 86400000 * 2)), billing_mode: 'DAILY', expected_mileage: 0, return_branch: car.branch_id }); quote.value = null }
 function payload() { return { ...form, vehicle_id: booking.value.id } }
 async function calculate() { if (!await formRef.value.validate().catch(() => false)) return; busy.value = true; try { quote.value = await api.post('/portal/quote', payload()) } catch { quote.value = null } finally { busy.value = false } }
 async function submit() {
+  // 提交的是预约，不是在线付款；取还车和线下收退款由门店办理。
   if (!await formRef.value.validate().catch(() => false)) return
   busy.value = true
   try { await api.post('/portal/orders', payload()); booking.value = null; await refresh(); await router.push('/portal/orders'); ElMessage.success('预约已提交，请按约定时间到店办理取车') } catch {} finally { busy.value = false }
@@ -29,6 +32,7 @@ async function cancel(order) {
   try { await ElMessageBox.confirm('确认取消该预约？取消后该租期将释放。', '取消预约', { type: 'warning', confirmButtonText: '确认取消', cancelButtonText: '保留预约' }); busy.value = true; await api.post(`/portal/orders/${order.id}/cancel`, {}); detail.value = null; await refresh(); ElMessage.success('预约已取消') } catch {} finally { busy.value = false }
 }
 async function saveProfile() {
+  // 保存成功后重新读取服务器数据，账号显示姓名也同步更新。
   if (!await profileRef.value.validate().catch(() => false)) return
   busy.value = true
   try { await api.put('/portal/profile', profile); state.user.name = profile.name; await refresh(); ElMessage.success('个人资料已更新') } catch {} finally { busy.value = false }

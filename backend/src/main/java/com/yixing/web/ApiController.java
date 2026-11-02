@@ -15,12 +15,14 @@ import static com.yixing.common.Values.*;
 
 @RestController
 @RequestMapping("/api")
+// 管理端接口只负责接收请求和转交业务服务；规则校验、事务和状态变更在各 Service 中。
 public class ApiController {
     private final Store store; private final com.yixing.vehicle.VehicleService vehicles; private final CustomerService customers; private final RentalService rentals; private final DispatchService dispatch; private final MaintenanceService maintenance; private final ReportService reports; private final SystemService system; private final Access access;
     public ApiController(Store store, com.yixing.vehicle.VehicleService vehicles, CustomerService customers, RentalService rentals, DispatchService dispatch, MaintenanceService maintenance, ReportService reports, SystemService system, Access access) {
         this.store = store; this.vehicles = vehicles; this.customers = customers; this.rentals = rentals; this.dispatch = dispatch; this.maintenance = maintenance; this.reports = reports; this.system = system; this.access = access;
     }
     @GetMapping("/bootstrap") public Map<String, Object> bootstrap() {
+        // 首次进入管理端时统一加载关联数据，页面通过编号关联车辆、客户和订单。
         return map("vehicles", store.list("vehicle"), "customers", store.list("customer"), "orders", store.list("rental_order"), "payments", store.list("payment_record"), "branches", store.list("branch"), "pricing", store.list("pricing_rule"), "dispatch", store.list("dispatch_task"), "maintenance", store.list("maintenance_record"), "reminders", maintenance.reminders(), "settings", store.get("settings", 1));
     }
     @GetMapping("/dashboard") public Map<String, Object> dashboard() {

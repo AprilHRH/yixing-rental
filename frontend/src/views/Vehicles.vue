@@ -9,6 +9,7 @@ import VehicleThumbnail from '../components/VehicleThumbnail.vue'
 import StatusTag from '../components/StatusTag.vue'
 import FormDialog from '../components/FormDialog.vue'
 const route = useRoute(), router = useRouter(), query = reactive({ search: '', status: route.query.status || '', branch: Number(route.query.branch) || '' }), view = ref('grid'), page = ref(1), open = ref(false), detail = ref(null), edit = ref(null), initial = ref({}), busy = ref(false)
+// 卡片和表格共用同一筛选结果；路由中的门店参数用于从调度页跳转后缩小范围。
 const filtered = computed(() => state.vehicles.filter(item => (!query.search || `${item.plate}${item.brand}${item.model}`.toLowerCase().includes(query.search.toLowerCase())) && (!query.status || item.status === query.status) && (!query.branch || item.branch_id === query.branch)))
 const rows = computed(() => filtered.value.slice((page.value - 1) * 9, page.value * 9))
 watch(query, () => page.value = 1)

@@ -1,9 +1,11 @@
 import { reactive, computed } from 'vue'
 import { api } from './api'
 
+// 各页面共享这份响应式数据，刷新后列表、详情和统计卡片会一起更新。
 export const state = reactive({ user: null, loading: false, updatedAt: null, vehicles: [], customers: [], orders: [], payments: [], branches: [], pricing: [], dispatch: [], maintenance: [], reminders: [], settings: {} })
 export const isAdmin = computed(() => state.user?.role === 'ADMIN')
 export async function refresh() {
+  // 客户端使用专用接口，由服务器筛选本人数据，不能只靠页面隐藏管理数据。
   state.loading = true
   try { Object.assign(state, await api.get(state.user?.role === 'CUSTOMER' ? '/portal/bootstrap' : '/bootstrap')); state.updatedAt = Date.now() } finally { state.loading = false }
 }
@@ -12,10 +14,12 @@ export const customer = id => state.customers.find(item => Number(item.id) === N
 export const branch = id => state.branches.find(item => Number(item.id) === Number(id)) || {}
 export const rule = id => state.pricing.find(item => Number(item.id) === Number(id)) || {}
 export const payments = id => state.payments.filter(item => Number(item.order_id) === Number(id))
+// 这里的收退款合计只用于页面展示，正式结算金额始终以后端计算为准。
 export const netPaid = id => payments(id).reduce((total, payment) => total + (payment.direction === 'IN' ? 1 : -1) * Number(payment.amount), 0)
 export const money = value => Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 export const dateText = value => value ? String(value).replace('T', ' ').slice(0, 16) : '—'
 export const localTime = (value = new Date()) => {
+  // 使用本地年月日拼接表单时间，避免转 UTC 后出现日期或小时偏移。
   const date = new Date(value)
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}T${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`
 }

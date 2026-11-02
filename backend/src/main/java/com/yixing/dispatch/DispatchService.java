@@ -15,6 +15,7 @@ public class DispatchService {
     private final Store store; private final Access access; private final RentalService rentals;
     public DispatchService(Store store, Access access, RentalService rentals) { this.store = store; this.access = access; this.rentals = rentals; }
     private void reservations(long vehicleId, LocalDateTime start, LocalDateTime end) {
+        // 不只检查时间重叠：调到另一门店还可能让后续预约的取车地点失效，也需要拦截。
         for (Map<String, Object> order : store.list("rental_order")) {
             if (number(order, "vehicle_id") == vehicleId && Set.of("RESERVED", "ACTIVE").contains(text(order, "status"))) {
                 require(!rentals.overlap(start, end, time(order, "planned_start"), time(order, "planned_end")), "调度时间与租赁预约冲突");
@@ -24,6 +25,7 @@ public class DispatchService {
     }
     @Transactional
     public Map<String, Object> create(Map<String, Object> input) {
+        // 创建只登记待执行任务，车辆此时还没有离开原门店。
         long vehicleId = number(input, "vehicle_id"); Map<String, Object> vehicle = store.lock("vehicle", vehicleId);
         require("AVAILABLE".equals(text(vehicle, "status")), "仅可用车辆可安排调度");
         long target = number(input, "to_branch"); store.get("branch", target);
@@ -41,6 +43,7 @@ public class DispatchService {
         Map<String, Object> vehicle = store.lock("vehicle", vehicleId); task = store.lock("dispatch_task", id);
         switch (action) {
             case "start" -> {
+                // 从建单到实际出发之间可能又有预约，因此出发前必须重新检查。
                 require("PENDING".equals(text(task, "status")) && "AVAILABLE".equals(text(vehicle, "status")), "任务或车辆状态不允许开始调度");
                 require(number(vehicle, "branch_id") == number(task, "from_branch"), "车辆已不在出发门店");
                 require(LocalDateTime.now().isBefore(time(task, "planned_end")), "调度计划已过期，请取消后重建");
@@ -49,6 +52,7 @@ public class DispatchService {
                 store.update("dispatch_task", id, map("status", "IN_PROGRESS", "actual_start", now()));
             }
             case "complete" -> {
+                // 确认到达后才更新所属门店，并恢复为可用；车辆和任务在同一事务更新。
                 require("IN_PROGRESS".equals(text(task, "status")) && "DISPATCHING".equals(text(vehicle, "status")), "仅进行中的调度可完成");
                 store.update("vehicle", vehicleId, map("status", "AVAILABLE", "branch_id", task.get("to_branch")));
                 store.update("dispatch_task", id, map("status", "COMPLETED", "actual_end", now()));

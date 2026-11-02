@@ -19,12 +19,14 @@ const modules = [
   { path: '/settings', label: '系统管理', icon: Setting, admin: true },
 ]
 const customerMode = computed(() => state.user?.role === 'CUSTOMER')
+// 管理端与客户端共用页面外壳，菜单随登录身份切换；菜单隐藏本身不代替接口权限检查。
 const visibleModules = computed(() => customerMode.value ? [{ path: '/portal', label: '选车出行', icon: Van, group: '我的易行' }, { path: '/portal/orders', label: '我的订单', icon: Tickets }, { path: '/portal/profile', label: '个人资料', icon: User }] : modules.filter(module => !module.admin || isAdmin.value))
 const date = computed(() => new Date(state.updatedAt || Date.now()).toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }))
 const pendingOrders = computed(() => state.orders.filter(order => ['RESERVED', 'RETURNED'].includes(order.status)).length)
 const hasDemo = computed(() => state.orders.some(order => order.order_no?.startsWith('YX-DEMO-')))
 async function load() { if (state.user) { try { await refresh(); ready.value = true } catch { ready.value = false } } }
 onMounted(load)
+// 登录或退出后重新判断是否加载业务数据，加载成功才显示内部页面。
 watch(() => state.user?.id, value => { if (value) load(); else ready.value = false })
 async function logout() { await api.post('/auth/logout'); state.user = null; router.push('/login') }
 async function command(value) {

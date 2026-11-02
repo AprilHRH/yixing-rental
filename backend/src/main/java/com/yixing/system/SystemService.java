@@ -34,6 +34,7 @@ public class SystemService {
         require(Set.of("ADMIN", "CUSTOMER").contains(role) && username.matches("[a-zA-Z0-9_]{3,30}"), "角色或账号格式不正确");
         Map<String, Object> data = map("username", username, "name", required(input, "name", 60), "role", role, "enabled", flag(input, "enabled"));
         String accountType = "CUSTOMER".equals(role) ? "CUSTOMER" : text(input, "account_type");
+        // account_type 表示管理员/业务人员等身份，role 决定接口权限，两者用途不同。
         if (accountType.isBlank()) accountType = "ADMIN";
         require(Set.of("ADMIN", "STAFF", "CUSTOMER").contains(accountType) && (!"ADMIN".equals(role) || !"CUSTOMER".equals(accountType)), "账号类型不正确");
         data.put("account_type", accountType);
@@ -72,6 +73,7 @@ public class SystemService {
     }
     @Transactional(isolation = org.springframework.transaction.annotation.Isolation.SERIALIZABLE)
     public byte[] backup() throws IOException {
+        // 把数据库快照和车辆图片放进同一个 ZIP；数据库使用高隔离级别读取一致的快照。
         access.admin(); access.log("导出备份", "数据库及车辆图片");
         Map<String, Object> snapshot = map("format", "yixing-backup-v1", "created_at", now());
         for (String table : TABLES) snapshot.put(table, store.list(table));
@@ -89,11 +91,13 @@ public class SystemService {
         return output.toByteArray();
     }
     public void restore(MultipartFile file, String confirmation) throws IOException {
+        // 恢复会替换现有业务数据，必须由管理员输入确认词后执行。
         access.admin(); require("RESTORE".equals(confirmation), "请输入 RESTORE 确认恢复");
         byte[] database = null; Map<String, byte[]> images = new LinkedHashMap<>(); long total = 0; int entries = 0;
         try (ZipInputStream zip = new ZipInputStream(file.getInputStream())) {
             ZipEntry entry;
             while ((entry = zip.getNextEntry()) != null) {
+                // 限制文件名、条目数和解压体积，防止路径越界或超大压缩包耗尽资源。
                 require(++entries <= 200, "备份文件条目过多");
                 require(entry.getName().equals("database.json") || entry.getName().matches("uploads/[a-f0-9-]+\\.(png|jpg)"), "备份包含不允许的文件");
                 byte[] bytes = zip.readNBytes(6 * 1024 * 1024); total += bytes.length;
@@ -109,6 +113,7 @@ public class SystemService {
         for (String table : TABLES) {
             Object rows = snapshot.get(table); require(rows instanceof List<?> && ((List<?>) rows).size() <= 10000, "备份表不完整或数据量超限");
             List<Map<String, Object>> records = json.convertValue(rows, new TypeReference<>() {});
+            // 根据实际数据库字段检查备份，未知字段不能直接写入 SQL。
             Set<String> columns = Set.of(jdbc.queryForRowSet("SELECT * FROM " + table + " WHERE 1=0").getMetaData().getColumnNames());
             for (Map<String, Object> row : records) require(columns.containsAll(row.keySet()) && row.containsKey("id") && number(row, "id") > 0, "备份字段不合法");
             if (table.equals("sys_user")) for (Map<String, Object> account : records) {
@@ -125,8 +130,10 @@ public class SystemService {
             Path target = uploads.resolve(entry.getKey());
             require(!Files.exists(target) || Arrays.equals(Files.readAllBytes(target), entry.getValue()), "同名图片内容冲突，已取消恢复");
         }
+        // 图片先检查冲突再写入；文件写入不属于数据库事务，数据库回滚不会自动删除图片。
         for (Map.Entry<String, byte[]> entry : images.entrySet()) if (!Files.exists(uploads.resolve(entry.getKey()))) Files.write(uploads.resolve(entry.getKey()), entry.getValue(), StandardOpenOption.CREATE_NEW);
         transactions.executeWithoutResult(status -> {
+            // 先删依赖表，再按相反方向插入；数据库恢复失败时整批数据回滚。
             List<String> reversed = new ArrayList<>(TABLES); Collections.reverse(reversed);
             for (String table : reversed) jdbc.update("DELETE FROM " + table);
             for (String table : TABLES) for (Map<String, Object> row : restored.get(table)) store.insert(table, new LinkedHashMap<>(row));
@@ -140,6 +147,7 @@ public class SystemService {
                 jdbc.execute("ALTER TABLE " + table + " ALTER COLUMN id RESTART WITH " + (maximum + 1));
             }
         }
+        // 备份中的账号和权限可能不同，恢复完成后要求所有人重新登录。
         com.yixing.auth.SessionFilter.invalidateSessions();
     }
 }

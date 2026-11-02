@@ -19,6 +19,7 @@ watch(() => route.query.scope, value => query.scope = value || '')
 watch(() => route.query.detail, value => { if (value) detailId.value = Number(value) })
 const formRules = Object.fromEntries(['customer_id', 'vehicle_id', 'planned_start', 'planned_end', 'billing_mode', 'pickup_branch', 'return_branch', 'expected_mileage'].map(key => [key, [{ required: true, message: '请完整填写此项', trigger: ['blur', 'change'] }]]))
 function create(order) {
+  // 新建与编辑共用弹窗，每次先清空旧值，避免上次订单的字段残留。
   editId.value = order?.id || null
   Object.keys(form).forEach(key => delete form[key])
   Object.assign(form, order ? { ...order } : { customer_id: undefined, vehicle_id: Number(route.query.vehicle) || undefined, planned_start: localTime(new Date(Date.now() + 60000)), planned_end: localTime(new Date(Date.now() + 86460000)), billing_mode: 'DAILY', expected_mileage: 200, pickup_branch: state.branches[0]?.id, return_branch: state.branches[0]?.id })
@@ -29,12 +30,14 @@ onMounted(() => { if (route.query.create) create(); if (route.query.detail) deta
 watch(() => route.query.create, value => { if (value) create() })
 function carChanged(id) { form.pickup_branch = vehicle(id).branch_id; form.return_branch = form.pickup_branch }
 function canBook(car) {
+  // 前端先标出明显冲突，帮助选车；是否能预约仍需后端在加锁后最终确认。
   if (!['AVAILABLE', 'RENTED'].includes(car.status)) return false
   if (!form.planned_start || !form.planned_end) return true
   return !state.orders.some(order => order.vehicle_id === car.id && order.id !== editId.value && ['RESERVED', 'ACTIVE'].includes(order.status) && (overdue(order) || (form.planned_start < order.planned_end && form.planned_end > order.planned_start))) && !state.dispatch.some(task => task.vehicle_id === car.id && ['PENDING', 'IN_PROGRESS'].includes(task.status) && form.planned_start < task.planned_end && form.planned_end > task.planned_start)
 }
 let quoteTimer, quoteVersion = 0
 watch(() => [form.vehicle_id, form.planned_start, form.planned_end, form.billing_mode, form.expected_mileage], () => {
+  // 连续修改表单时等待 200 毫秒再报价；版本号防止较早的慢响应覆盖最新结果。
   clearTimeout(quoteTimer); const version = ++quoteVersion
   if (!open.value || !form.vehicle_id || !form.planned_start || !form.planned_end) return
   quoteTimer = setTimeout(async () => { try { const result = await api.post('/pricing/quote', form, { silent: true }); if (version === quoteVersion) { quote.value = result; quoteError.value = '' } } catch (error) { if (version === quoteVersion) { quote.value = null; quoteError.value = error.response?.data?.message || '暂时无法报价' } } }, 200)
@@ -57,10 +60,12 @@ function act(type) {
   actionOpen.value = true
 }
 async function submitAction(data) {
+  // 请求编号用于识别本次业务提交，便于后端拦截相同收款请求被重复登记。
   busy.value = true
   try { await api.post(`/orders/${detail.value.id}/${actionType.value}`, { ...data, request_id: crypto.randomUUID() }); actionOpen.value = false; await refresh(); ElMessage.success('业务办理成功') } catch {} finally { busy.value = false }
 }
 async function terminal(type) {
+  // 这里只预览补收/退款差额，确认线下处理后提交；后端仍会重新计算并校验状态。
   const order = detail.value
   const difference = type === 'cancel' ? -netPaid(order.id) : Number(order.actual_rent) - netPaid(order.id)
   const text = difference > 0 ? `本次需补收 ¥${money(difference)}` : difference < 0 ? `本次需退款 ¥${money(-difference)}` : '本次无需补款或退款'

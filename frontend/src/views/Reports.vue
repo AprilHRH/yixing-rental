@@ -10,11 +10,13 @@ async function load() { if (!dates.value?.length) return; busy.value = true; try
 onMounted(load)
 const lineOption = computed(() => ({ color: ['#f97316', '#2563eb'], tooltip: { trigger: 'axis' }, legend: { bottom: 0, data: ['租赁收入', '新增订单'] }, grid: { top: 38, left: 65, right: 55, bottom: 60 }, xAxis: { type: 'category', name: '日期', nameLocation: 'middle', nameGap: 26, data: (result.value?.trend || []).map(item => item.date.slice(5)), axisLine: { lineStyle: { color: '#dfe5e1' } }, axisLabel: { color: '#4d607a' }, axisTick: { show: false } }, yAxis: [{ type: 'value', name: '收入（元）', splitLine: { lineStyle: { color: '#edf0ee' } } }, { type: 'value', name: '订单（笔）', minInterval: 1, splitLine: { show: false } }], series: [{ name: '租赁收入', type: 'bar', barMaxWidth: 18, itemStyle: { borderRadius: [3, 3, 0, 0] }, data: (result.value?.trend || []).map(item => Number(item.revenue)) }, { name: '新增订单', type: 'line', yAxisIndex: 1, smooth: true, symbolSize: 5, data: (result.value?.trend || []).map(item => item.orders) }] }))
 const metricNames = { hours: '出租时长', count: '出租次数', revenue: '租金收入' }
+// 切换指标只改变展示排序，不重算业务收入；统计口径以服务器返回结果为准。
 const ranked = computed(() => [...(result.value?.usage || [])].sort((first, second) => Number(second[metric.value]) - Number(first[metric.value]) || Number(first.vehicle_id) - Number(second.vehicle_id)))
 const maximum = computed(() => Math.max(0, ...ranked.value.map(row => Number(row[metric.value]))))
 const dailyRows = computed(() => [...(result.value?.trend || [])].sort((first, second) => second.date.localeCompare(first.date)))
 const metricValue = row => metric.value === 'hours' ? Number(row.hours).toFixed(1) + ' 小时' : metric.value === 'count' ? row.count + ' 次' : '¥' + money(row.revenue)
 function exportData() {
+  // 导出当前选中的报表类型，与屏幕上的统计区间和排序保持一致。
   if (!result.value) return
   if (tab.value === 'usage') exportCsv(ranked.value, [{ label: '车牌', value: 'plate' }, { label: '车型', value: 'model' }, { label: '出租次数', value: 'count' }, { label: '出租小时', value: row => Number(row.hours).toFixed(2) }, { label: '已结算租金（元）', value: 'revenue' }], '车辆使用统计.csv')
   else exportCsv(dailyRows.value, [{ label: '日期', value: 'date' }, { label: '租赁收入（元）', value: 'revenue' }, { label: '新增订单（笔）', value: 'orders' }], '经营统计.csv')

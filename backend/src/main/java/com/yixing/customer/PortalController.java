@@ -19,10 +19,12 @@ public class PortalController {
     private final RentalService rentals;
     public PortalController(Store store, Access access, RentalService rentals) { this.store = store; this.access = access; this.rentals = rentals; }
     private long customerId() {
+        // 从登录身份取得客户编号，不接受浏览器自行指定，防止冒用其他客户。
         if (!"CUSTOMER".equals(text(access.user(), "role")) || access.user().get("customer_id") == null) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "仅已关联档案的客户账号可访问");
         return number(access.user(), "customer_id");
     }
     private Map<String, Object> publicVehicle(Map<String, Object> vehicle) {
+        // 只挑选客户端需要的字段，车辆内部档案不会随着整条记录一起返回。
         Map<String, Object> result = new LinkedHashMap<>();
         for (String key : List.of("id", "plate", "brand", "model", "category", "color", "seats", "branch_id", "pricing_id", "status", "image")) result.put(key, vehicle.get(key));
         return result;
@@ -33,6 +35,7 @@ public class PortalController {
         return customer;
     }
     @GetMapping("/bootstrap") public Map<String, Object> bootstrap() {
+        // 先找本人的订单，再据此筛选流水；历史订单引用的车辆也保留，便于查看详情。
         long customerId = customerId();
         List<Map<String, Object>> orders = store.list("rental_order").stream().filter(order -> number(order, "customer_id") == customerId).toList();
         Set<Long> orderIds = new HashSet<>(), vehicleIds = new HashSet<>();
@@ -49,6 +52,7 @@ public class PortalController {
     }
     @PostMapping("/quote") public Map<String, Object> quote(@RequestBody Map<String, Object> input) { customerId(); return rentals.quote(input); }
     @PostMapping("/orders") @Transactional public Map<String, Object> reserve(@RequestBody Map<String, Object> input) {
+        // 只接收预约所需字段，客户身份和取车门店由服务器确定，再复用租赁业务校验。
         Map<String, Object> safe = new LinkedHashMap<>();
         for (String key : List.of("vehicle_id", "planned_start", "planned_end", "expected_mileage", "billing_mode", "return_branch")) safe.put(key, input.get(key));
         safe.put("customer_id", customerId());
@@ -56,6 +60,7 @@ public class PortalController {
         return rentals.save(null, safe);
     }
     @PostMapping("/orders/{id}/cancel") @Transactional public Map<String, Object> cancel(@PathVariable long id) {
+        // 先检查订单归属，再按车辆、订单顺序加锁；有收款时需管理员线下确认退款。
         Map<String, Object> order = store.get("rental_order", id);
         if (number(order, "customer_id") != customerId()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "不能操作其他客户的订单");
         store.lock("vehicle", number(order, "vehicle_id"));

@@ -1,3 +1,4 @@
+// 参考图车牌遮挡范围：[左边距, 上边距, 宽, 高]，对应 960 x 520 的统一图片画布。
 export const vehiclePlateShields = {
   "/images/vehicles/buick-gl8.webp": [
     157,

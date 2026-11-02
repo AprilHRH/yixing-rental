@@ -9,12 +9,14 @@ export function dayKey(value = new Date()) {
 }
 
 export function weekStart(now = new Date()) {
+  // 工作台的“近一周”是包含今天的最近 7 天，不是从周一开始的自然周。
   const start = new Date(now)
   start.setDate(start.getDate() - 6)
   return dayKey(start)
 }
 
 export function matchesOrderScope(order, scope, now = new Date()) {
+  // 工作台点击今日取车、今日还车或逾期卡片后，订单页复用相同筛选规则。
   const today = dayKey(now)
   if (scope === 'pickup-today') return order.status === 'RESERVED' && order.planned_start?.slice(0, 10) === today
   if (scope === 'return-today') return order.status === 'ACTIVE' && order.planned_end?.slice(0, 10) === today
@@ -41,6 +43,7 @@ export function categorySummary(vehicles) {
 }
 
 export function buildOperations(orders, maintenance, now = new Date()) {
+  // 把订单和维修工单合成待办，数字越小越靠前，优先处理逾期还车和今日还车。
   const tasks = []
   for (const order of orders) {
     const common = { id: `order-${order.id}`, vehicleId: order.vehicle_id, reference: order.order_no, path: `/orders?detail=${order.id}` }
@@ -62,6 +65,7 @@ export function buildOperations(orders, maintenance, now = new Date()) {
 }
 
 export function recentOrders(orders) {
+  // 复制后再排序，不改变共享订单数组，避免其他页面的显示顺序被意外修改。
   return [...orders].sort((first, second) => String(second.created_at || '').localeCompare(String(first.created_at || '')) || Number(second.id) - Number(first.id)).slice(0, 5)
 }
 

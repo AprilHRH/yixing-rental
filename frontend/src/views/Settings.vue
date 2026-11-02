@@ -10,10 +10,12 @@ async function load() { try { Object.assign(data, await api.get('/system')); Obj
 onMounted(load)
 const fields = computed(() => kind.value === 'user' ? [{ key: 'username', label: '登录账号', tip: '3—30 位字母、数字或下划线' }, { key: 'name', label: '姓名' }, { key: 'password', label: editId.value ? '重置密码（留空不修改）' : '初始密码', type: 'password', required: !editId.value, tip: '至少 8 位' }, { key: 'account_type', label: '账号类型', type: 'select', options: [{ label: '管理员', value: 'ADMIN' }, { label: '业务人员（管理权限）', value: 'STAFF' }, { label: '客户', value: 'CUSTOMER' }] }, { key: 'customer_id', label: '关联客户档案', type: 'select', wide: true, show: form => form.account_type === 'CUSTOMER', options: state.customers.filter(customer => !data.users.some(user => user.customer_id === customer.id && user.id !== editId.value)).map(customer => ({ label: customer.name + ' · ' + customer.phone, value: customer.id })), tip: '新客户请先在客户管理中建档，或使用登录页的客户注册。一个档案仅关联一个账号。' }, { key: 'enabled', label: '账号启用', type: 'switch', required: false }] : [{ key: 'name', label: '门店名称', wide: true }, { key: 'address', label: '门店地址', wide: true }, { key: 'phone', label: '联系电话', wide: true }])
 function create(type, row) { kind.value = type; editId.value = row?.id || null; initial.value = row ? { ...row, password: '' } : type === 'user' ? { enabled: true, account_type: 'STAFF' } : {}; open.value = true }
+// 管理员和业务人员共用管理权限，客户使用独立权限；保存后刷新设置与全局业务数据。
 async function save(input) { if (kind.value === 'user') input.role = input.account_type === 'CUSTOMER' ? 'CUSTOMER' : 'ADMIN'; busy.value = true; try { const resource = kind.value === 'user' ? 'users' : 'branches'; await api[editId.value ? 'put' : 'post'](`/system/${resource}` + (editId.value ? '/' + editId.value : ''), input); open.value = false; await Promise.all([load(), refresh()]); ElMessage.success('设置已保存') } catch {} finally { busy.value = false } }
 async function saveSettings() { busy.value = true; try { await api.put('/system/settings', settings); await Promise.all([load(), refresh()]); ElMessage.success('系统参数已保存') } catch {} finally { busy.value = false } }
 async function backup() { busy.value = true; try { const blob = await api.get('/system/backup', { responseType: 'blob' }); download(blob, '易行租车备份-' + new Date().toISOString().slice(0, 10) + '.zip', 'application/zip'); await load(); ElMessage.success('备份已导出，请妥善保管') } catch {} finally { busy.value = false } }
 async function restore(event) {
+  // 先尝试导出当前备份，再要求人工确认已保存并输入确认词；恢复后需重新登录。
   const file = event.target.files[0]; event.target.value = ''; if (!file) return
   try {
     await backup()

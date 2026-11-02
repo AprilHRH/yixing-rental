@@ -13,6 +13,7 @@ watch(query, () => page.value = 1)
 const fields = computed(() => [{ key: 'vehicle_id', label: '调度车辆', type: 'select', wide: true, options: state.vehicles.filter(car => car.status === 'AVAILABLE').map(car => ({ label: `${car.plate} · ${car.model} / ${branch(car.branch_id).name}`, value: car.id })) }, { key: 'to_branch', label: '目标门店', type: 'select', options: form => state.branches.filter(item => item.id !== vehicle(form.vehicle_id).branch_id).map(item => ({ label: item.name, value: item.id })) }, { key: 'assignee', label: '调度负责人' }, { key: 'planned_start', label: '计划出发时间', type: 'datetime' }, { key: 'planned_end', label: '计划到达时间', type: 'datetime' }, { key: 'notes', label: '调度说明', type: 'textarea', required: false, wide: true, maxlength: 500 }])
 const initial = computed(() => ({ planned_start: localTime(new Date(Date.now() + 60000)), planned_end: localTime(new Date(Date.now() + 3660000)), assignee: state.user.name }))
 async function save(data) { busy.value = true; try { await api.post('/dispatch', data); open.value = false; await refresh(); ElMessage.success('调度任务已创建') } catch {} finally { busy.value = false } }
+// 页面只提交开始/到达/取消指令；是否允许执行及门店、车况变更由后端统一处理。
 async function action(task, type) { try { await ElMessageBox.confirm(`确认${{ start: '开始调度', complete: '车辆已到达目标门店', cancel: '取消任务' }[type]}？`, '调度操作'); busy.value = true; await api.post(`/dispatch/${task.id}/${type}`); await refresh(); ElMessage.success('调度状态已更新') } catch {} finally { busy.value = false } }
 </script>
 <template>

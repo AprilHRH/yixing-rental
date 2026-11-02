@@ -20,6 +20,7 @@ public class AccountService {
     }
     @Transactional
     public Map<String, Object> register(Map<String, Object> input) {
+        // 公开注册只能创建客户，不能通过修改请求中的 role 把自己注册成管理员。
         require(text(input, "role").isBlank() || "CUSTOMER".equals(text(input, "role")), "公开注册仅支持客户账号");
         username(input, null);
         String password = required(input, "password", 64);
@@ -29,6 +30,7 @@ public class AccountService {
         require(phone.matches("[0-9+ -]{7,20}"), "联系方式格式不正确");
         require(!date(input, "license_expiry").isBefore(LocalDate.now()), "驾驶证已过期");
         require(store.list("customer").stream().noneMatch(customer -> identity.equalsIgnoreCase(text(customer, "identity_no"))), "该证件已建档，请联系管理员开通或找回客户账号");
+        // 客户档案与登录账号一起创建，任何一步失败都回滚，避免只建档却无法登录。
         Map<String, Object> customer = store.insert("customer", map("name", required(input, "name", 60), "identity_no", identity, "phone", phone, "license_no", required(input, "license_no", 80), "license_expiry", date(input, "license_expiry").toString(), "category", "NORMAL", "restricted", false, "notes", ""));
         Map<String, Object> user = store.insert("sys_user", map("username", text(input, "username"), "password_hash", new BCryptPasswordEncoder().encode(password), "name", customer.get("name"), "role", "CUSTOMER", "account_type", "CUSTOMER", "customer_id", customer.get("id"), "enabled", true));
         store.insert("operation_log", map("operator", "客户自主注册", "action", "开通客户账号", "target", text(user, "username"), "created_at", now()));

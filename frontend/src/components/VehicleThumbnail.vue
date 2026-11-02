@@ -10,9 +10,11 @@ const props = defineProps({
 })
 const failed = ref([]), loaded = ref(false)
 const sources = computed(() => vehiclePhotoSources(props.vehicle))
+// 图片加载失败就尝试下一张；全部失败显示占位图，不留下破损图片图标。
 const photo = computed(() => sources.value.find(item => !failed.value.includes(item.src)))
 watch(() => photo.value?.src, () => loaded.value = false)
 const plateShield = computed(() => photo.value?.reference ? vehiclePlateShields[photo.value.src] : null)
+// 参考图明确标注“非实拍”，避免与该车辆档案照片混淆。
 const description = computed(() => photo.value?.reference ? `${props.vehicle.brand || ''} ${props.vehicle.model || ''} 车型参考图，非该车实拍` : `${props.vehicle.plate || ''} 车辆档案照片`)
 watch(() => [props.vehicle.image, props.vehicle.brand, props.vehicle.model], () => { failed.value = [] })
 function imageError() { if (photo.value) failed.value.push(photo.value.src) }

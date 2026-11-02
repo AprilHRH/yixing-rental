@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 @RestControllerAdvice
+// 将常见异常转成统一的 message，前端可以直接提示；数据库错误不暴露 SQL 细节。
 public class ApiErrors {
     @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
     public ResponseEntity<Map<String, String>> status(org.springframework.web.server.ResponseStatusException exception) {

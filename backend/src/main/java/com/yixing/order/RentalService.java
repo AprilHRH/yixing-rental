@@ -14,16 +14,20 @@ import static com.yixing.common.BusinessException.require;
 import static com.yixing.common.Values.*;
 
 @Service
+// 租赁业务入口：预约 -> 收押金 -> 交车 -> 还车 -> 结算，也支持取车前取消。
+// 标有 @Transactional 的方法会把多次数据库修改作为一个整体，失败时一起回滚。
 public class RentalService {
     private final Store store;
     private final Access access;
     private final CustomerService customers;
     private final PricingService pricing;
     public RentalService(Store store, Access access, CustomerService customers, PricingService pricing) { this.store = store; this.access = access; this.customers = customers; this.pricing = pricing; }
+    // 两段租期只要真正交叉就算冲突；上一单结束时间等于下一单开始时间时不冲突。
     public boolean overlap(LocalDateTime start, LocalDateTime end, LocalDateTime otherStart, LocalDateTime otherEnd) { return start.isBefore(otherEnd) && end.isAfter(otherStart); }
     public void available(long vehicleId, LocalDateTime start, LocalDateTime end, long excludedOrder) {
         require(end.isAfter(start), "计划还车时间必须晚于取车时间");
         Map<String, Object> vehicle = store.get("vehicle", vehicleId);
+        // 正在出租的车仍能预约未来时段，但逾期未还的车无法确定何时可交付，需要拦截。
         require(Set.of("AVAILABLE", "RENTED").contains(text(vehicle, "status")), "车辆正在维修、调度或已停用");
         for (Map<String, Object> order : store.list("rental_order")) {
             if (number(order, "vehicle_id") != vehicleId || number(order, "id") == excludedOrder || !Set.of("RESERVED", "ACTIVE").contains(text(order, "status"))) continue;
@@ -36,6 +40,7 @@ public class RentalService {
         }
     }
     public Map<String, Object> quote(Map<String, Object> input) {
+        // 试算只读当前价格，不占用车辆；正式保存时还会重新校验车况、租期和价格。
         Map<String, Object> vehicle = store.get("vehicle", number(input, "vehicle_id"));
         Map<String, Object> rates = store.get("pricing_rule", number(vehicle, "pricing_id"));
         return pricing.calculate(rates, text(input, "billing_mode"), time(input, "planned_start"), time(input, "planned_end"), number(input, "expected_mileage"));
@@ -43,6 +48,7 @@ public class RentalService {
     @Transactional
     public Map<String, Object> save(Long id, Map<String, Object> input) {
         long vehicleId = number(input, "vehicle_id");
+        // 先锁住车辆行，让同一辆车的预约按顺序处理，避免两个人同时抢到相同租期。
         Map<String, Object> vehicle = store.lock("vehicle", vehicleId);
         if (id != null) {
             Map<String, Object> existing = store.lock("rental_order", id);
@@ -61,17 +67,20 @@ public class RentalService {
         Map<String, Object> rates = store.get("pricing_rule", number(vehicle, "pricing_id"));
         Map<String, Object> quote = pricing.calculate(rates, text(input, "billing_mode"), start, end, number(input, "expected_mileage"));
         Map<String, Object> data = map("customer_id", number(input, "customer_id"), "vehicle_id", vehicleId, "pickup_branch", pickup, "return_branch", returned, "planned_start", start.toString(), "planned_end", end.toString(), "expected_mileage", number(input, "expected_mileage"), "billing_mode", text(input, "billing_mode"), "estimated_rent", quote.get("rent"));
+        // 把下单时的价格复制到订单中。以后调整价目表，也不改变这张订单约定的价格。
         for (String field : List.of("daily_rate", "monthly_rate", "base_fee", "mileage_rate", "deposit")) data.put(field, rates.get(field));
         if (id == null) data.putAll(map("order_no", "YX" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss")) + UUID.randomUUID().toString().substring(0, 6).toUpperCase(), "status", "RESERVED", "created_at", now()));
         Map<String, Object> result = id == null ? store.insert("rental_order", data) : store.update("rental_order", id, data);
         access.log(id == null ? "创建订单" : "修改预约", text(result, "order_no")); return result;
     }
     private Map<String, Object> lockedOrder(long id) {
+        // 所有订单操作统一先锁车辆、再锁订单，减少并发时互相等锁的风险。
         Map<String, Object> initial = store.get("rental_order", id);
         store.lock("vehicle", number(initial, "vehicle_id"));
         return store.lock("rental_order", id);
     }
     public BigDecimal netPaid(long id) {
+        // 净收款 = 所有收款 - 所有退款，包含押金；结算时要和最终租金抵扣。
         BigDecimal total = BigDecimal.ZERO;
         for (Map<String, Object> payment : store.list("payment_record")) {
             if (number(payment, "order_id") == id) total = total.add(money(payment, "amount").multiply("IN".equals(text(payment, "direction")) ? BigDecimal.ONE : BigDecimal.ONE.negate()));
@@ -79,6 +88,8 @@ public class RentalService {
         return total;
     }
     private void record(long orderId, String requestId, String kind, String direction, BigDecimal amount) {
+        // 这里只登记已经线下确认的收退款，不会实际调用银行卡或第三方支付。
+        // 金额始终存正数，IN/OUT 分别表示收款/退款；零差额无需生成流水。
         require(!requestId.isBlank() && requestId.length() <= 80, "缺少有效的操作请求编号");
         if (amount.signum() == 0) return;
         store.insert("payment_record", map("order_id", orderId, "request_id", requestId, "kind", kind, "direction", direction, "amount", amount, "method", "线下登记", "created_at", now(), "operator", text(access.user(), "name")));
@@ -88,6 +99,7 @@ public class RentalService {
         Map<String, Object> order = lockedOrder(id);
         require(Set.of("RESERVED", "ACTIVE").contains(text(order, "status")), "当前订单不允许收取预付款");
         String requestId = required(input, "request_id", 80);
+        // 同一次收款带同一个请求编号，重复点击或重发请求时不能再记一次账。
         require(store.list("payment_record").stream().noneMatch(payment -> requestId.equals(text(payment, "request_id"))), "该收款操作已经登记，请勿重复提交");
         BigDecimal amount = money(input, "amount"); require(amount.signum() > 0, "收款金额必须大于零");
         String kind = text(input, "kind"); require(Set.of("DEPOSIT", "RENT").contains(kind), "款项类型不正确");
@@ -105,6 +117,7 @@ public class RentalService {
         require(number(vehicle, "branch_id") == number(order, "pickup_branch"), "车辆不在取车门店");
         require(!LocalDateTime.now().isBefore(time(order, "planned_start").minusMinutes(10)) && LocalDateTime.now().isBefore(time(order, "planned_end")), "请在预约取车时间前 10 分钟至计划还车时间内交车");
         customers.eligible(store.lock("customer", number(order, "customer_id")), time(order, "planned_end").toLocalDate());
+        // 预约后客户资料可能变化，交车时重查驾驶资格，并确认押金已收齐。
         BigDecimal depositPaid = store.list("payment_record").stream().filter(payment -> number(payment, "order_id") == id && "DEPOSIT".equals(text(payment, "kind"))).map(payment -> money(payment, "amount")).reduce(BigDecimal.ZERO, BigDecimal::add);
         require(depositPaid.compareTo(money(order, "deposit")) >= 0, "请先收齐押金");
         long mileage = number(input, "start_mileage"); require(mileage >= number(vehicle, "mileage") && mileage <= 2000000, "取车里程不能低于车辆当前里程");
@@ -123,10 +136,12 @@ public class RentalService {
         LocalDateTime end = LocalDateTime.now();
         LocalDateTime start = time(order, "actual_start");
         if (!end.isAfter(start)) end = start.plusSeconds(1);
+        // 最终租金按服务器记录的实际租期、实际行驶里程和订单内保存的价格计算。
         Map<String, Object> quote = pricing.calculate(order, text(order, "billing_mode"), start, end, mileage - number(order, "start_mileage"));
         BigDecimal rent = ((BigDecimal) quote.get("rent")).add(extra).subtract(discount); require(rent.signum() >= 0, "优惠金额不能超过总费用");
         long returnedBranch = number(input, "return_branch"); store.get("branch", returnedBranch);
         boolean damage = flag(input, "damage");
+        // 异常还车会直接进入维修并生成工单，避免有故障的车再次被交付。
         store.update("vehicle", number(order, "vehicle_id"), map("status", damage ? "MAINTENANCE" : "AVAILABLE", "mileage", mileage, "branch_id", returnedBranch));
         Map<String, Object> result = store.update("rental_order", id, map("status", "RETURNED", "actual_end", end.toString(), "end_mileage", mileage, "return_branch", returnedBranch, "extra_fee", extra, "discount", discount, "fee_notes", notes, "actual_rent", rent, "return_condition", required(input, "condition", 500), "damage", damage));
         if (damage) store.insert("maintenance_record", map("vehicle_id", number(order, "vehicle_id"), "type", "REPAIR", "project", "还车异常检修：" + text(input, "condition"), "assignee", text(access.user(), "name"), "cost", 0, "status", "IN_PROGRESS", "started_at", now()));
@@ -135,6 +150,8 @@ public class RentalService {
     @Transactional
     public Map<String, Object> settle(long id, Map<String, Object> input) {
         Map<String, Object> order = lockedOrder(id); require("RETURNED".equals(text(order, "status")), "仅待结算订单可以结算");
+        // 最终租金减去净收款：正数表示还要补收，负数表示要退还多收部分（含剩余押金）。
+        // 流水和完成状态在同一事务里保存，不会出现记了款但订单没完成的半成品。
         BigDecimal difference = money(order, "actual_rent").subtract(netPaid(id));
         record(id, required(input, "request_id", 80), "SETTLEMENT", difference.signum() >= 0 ? "IN" : "OUT", difference.abs());
         Map<String, Object> result = store.update("rental_order", id, map("status", "COMPLETED", "completed_at", now()));
@@ -143,6 +160,7 @@ public class RentalService {
     @Transactional
     public Map<String, Object> cancel(long id, Map<String, Object> input) {
         Map<String, Object> order = lockedOrder(id); require("RESERVED".equals(text(order, "status")), "仅待取车订单可以取消");
+        // 取消前退回该订单尚未退还的全部收款；已经交车的订单要走还车结算流程。
         record(id, required(input, "request_id", 80), "CANCEL_REFUND", "OUT", netPaid(id));
         Map<String, Object> result = store.update("rental_order", id, map("status", "CANCELLED", "cancelled_at", now()));
         access.log("取消订单", text(order, "order_no")); return result;

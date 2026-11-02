@@ -13,6 +13,7 @@ public class AccountUpgrade implements ApplicationRunner {
     public AccountUpgrade(JdbcTemplate jdbc) { this.jdbc = jdbc; }
     @Override
     public void run(ApplicationArguments arguments) {
+        // 启动时兼容旧账号结构：只补缺失字段，不删除原有数据；业务人员保留身份标记。
         java.util.Set<String> columns = new java.util.HashSet<>();
         for (String column : jdbc.queryForRowSet("SELECT * FROM sys_user WHERE 1=0").getMetaData().getColumnNames()) columns.add(column.toLowerCase());
         if (!columns.contains("account_type")) jdbc.execute("ALTER TABLE sys_user ADD COLUMN account_type VARCHAR(20) NOT NULL DEFAULT 'ADMIN'");

@@ -14,6 +14,7 @@ const fields = [{ key: 'name', label: '客户姓名' }, { key: 'phone', label: '
 function create(customer) { edit.value = customer?.id || null; initial.value = customer ? { ...customer } : { category: 'NORMAL', restricted: false }; open.value = true }
 async function save(data) { busy.value = true; try { const result = await api[edit.value ? 'put' : 'post']('/customers' + (edit.value ? '/' + edit.value : ''), data); open.value = false; await refresh(); if (detail.value?.id === result.id) detail.value = result; ElMessage.success('客户资料已保存') } catch {} finally { busy.value = false } }
 const history = computed(() => state.orders.filter(order => order.customer_id === detail.value?.id))
+// 信用记录从真实订单汇总逾期、损坏和完成次数，不另造评分，也不自动改变限制租赁标记。
 const credit = computed(() => ({ overdue: history.value.filter(order => overdue(order) || (order.actual_end && order.actual_end > order.planned_end)).length, damage: history.value.filter(order => order.damage).length, completed: history.value.filter(order => order.status === 'COMPLETED').length }))
 </script>
 
