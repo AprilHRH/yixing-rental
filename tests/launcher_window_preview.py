@@ -7,12 +7,14 @@ import time
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
+ARTIFACTS = ROOT / 'data/test-artifacts/launcher-window'
 
 
 def main():
     if sys.platform != 'win32':
         print('SKIP: Windows launcher UI test')
         return
+    ARTIFACTS.mkdir(parents=True, exist_ok=True)
     user = ctypes.windll.user32
     user.SetProcessDPIAware()
     user.FindWindowW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR]
@@ -103,7 +105,7 @@ def main():
             pixels = ctypes.create_string_buffer(width * height * 4)
             assert graphics.GetDIBits(memory_dc, bitmap, 0, height, pixels, ctypes.byref(header), 0)
             image = Image.frombytes('RGB', (width, height), pixels.raw, 'raw', 'BGRX')
-            image.crop(image.getbbox()).save(ROOT / 'docs/previews/current/launcher.png')
+            image.crop(image.getbbox()).save(ARTIFACTS / 'launcher.png')
         finally:
             graphics.SelectObject(memory_dc, previous)
             graphics.DeleteObject(bitmap)

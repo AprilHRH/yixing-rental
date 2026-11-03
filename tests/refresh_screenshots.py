@@ -5,7 +5,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright, expect
 
 ROOT = Path(__file__).resolve().parents[1]
-ARTIFACTS = ROOT / 'docs/previews/current'
+ARTIFACTS = ROOT / 'data/test-artifacts/current-screenshots'
 BASE = 'http://127.0.0.1:5173'
 
 
