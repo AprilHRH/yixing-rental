@@ -43,9 +43,10 @@ public class SessionFilter extends OncePerRequestFilter {
         try { user = store.get("sys_user", ((Number) session.getAttribute("userId")).longValue()); }
         catch (Exception exception) { fail(response, 401, "登录状态已失效"); return; }
         if (!flag(user, "enabled")) { session.invalidate(); fail(response, 401, "账号已停用"); return; }
+        if (!text(user, "password_hash").equals(session.getAttribute("passwordHash"))) { session.invalidate(); fail(response, 401, "密码已变更，请重新登录"); return; }
         request.setAttribute("user", user);
         // 权限在服务器上判断。即使客户手动输入管理端接口地址，也不能读取管理数据。
-        if ("CUSTOMER".equals(text(user, "role")) && !path.startsWith("/api/portal/") && !java.util.Set.of("/api/auth/me", "/api/auth/logout", "/api/auth/password").contains(path)) {
+        if ("CUSTOMER".equals(text(user, "role")) && !path.startsWith("/api/portal/") && !java.util.Set.of("/api/auth/me", "/api/auth/logout", "/api/auth/password", "/api/auth/account").contains(path)) {
             fail(response, 403, "客户账号不能访问管理端数据"); return;
         }
         if ((path.startsWith("/api/system") || path.startsWith("/api/reports")) && !"ADMIN".equals(text(user, "role"))) {

@@ -2,7 +2,7 @@ package com.yixing.auth;
 
 import com.yixing.data.Store;
 import java.time.LocalDate;
-import java.util.Map;
+import java.util.*;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,6 +13,46 @@ import static com.yixing.common.Values.*;
 public class AccountService {
     private final Store store;
     public AccountService(Store store) { this.store = store; }
+    // 账号新增、编辑、删除和客户写操作共用这把事务锁，避免注销和下单同时通过检查。
+    public void lockAccounts() { store.lock("settings", 1); }
+    public Map<String, Object> lockCustomerAccount(long id) {
+        lockAccounts();
+        Map<String, Object> user = store.lock("sys_user", id);
+        require("CUSTOMER".equals(text(user, "role")) && flag(user, "enabled") && user.get("customer_id") != null, "客户登录状态已变化，请重新登录");
+        return user;
+    }
+    public boolean administrator(Map<String, Object> user) {
+        return "ADMIN".equals(text(user, "role")) && !"STAFF".equals(text(user, "account_type")) && flag(user, "enabled");
+    }
+    public void keepAdministrator(Map<String, Object> existing, Map<String, Object> replacement) {
+        if (administrator(existing) && !administrator(replacement)) {
+            require(store.list("sys_user").stream().anyMatch(user -> number(user, "id") != number(existing, "id") && administrator(user)), "必须保留至少一个启用的管理员账号");
+        }
+    }
+    private void requireOrdersFinished(Map<String, Object> user) {
+        if (user.get("customer_id") == null) return;
+        long customerId = number(user, "customer_id");
+        store.lock("customer", customerId);
+        require(store.list("rental_order").stream().noneMatch(order -> number(order, "customer_id") == customerId && Set.of("RESERVED", "ACTIVE", "RETURNED").contains(text(order, "status"))), "该客户有未完成订单，请先取消预约或完成还车结算");
+    }
+    @Transactional
+    public void deleteManaged(long id, long actorId) {
+        lockAccounts();
+        require(id != actorId, "不能删除当前登录账号，请使用其他管理员账号操作");
+        Map<String, Object> user = store.lock("sys_user", id);
+        keepAdministrator(user, map());
+        requireOrdersFinished(user);
+        // 只删除登录账号，客户档案、订单和收退款记录继续保留。
+        store.delete("sys_user", id);
+    }
+    @Transactional
+    public void close(long id, String password) {
+        Map<String, Object> user = lockCustomerAccount(id);
+        require(new BCryptPasswordEncoder().matches(password, text(user, "password_hash")), "当前密码不正确");
+        requireOrdersFinished(user);
+        store.insert("operation_log", map("operator", text(user, "name"), "action", "客户注销账号", "target", text(user, "username"), "created_at", now()));
+        store.delete("sys_user", id);
+    }
     public void username(Map<String, Object> input, Long excludedId) {
         String username = required(input, "username", 30);
         require(username.matches("[a-zA-Z0-9_]{3,30}"), "账号须为 3 至 30 位字母、数字或下划线");
@@ -20,6 +60,7 @@ public class AccountService {
     }
     @Transactional
     public Map<String, Object> register(Map<String, Object> input) {
+        lockAccounts();
         // 公开注册只能创建客户，不能通过修改请求中的 role 把自己注册成管理员。
         require(text(input, "role").isBlank() || "CUSTOMER".equals(text(input, "role")), "公开注册仅支持客户账号");
         username(input, null);

@@ -33,6 +33,9 @@ public class Store {
         check(table); checkColumns(data); require(!data.containsKey("id"), "不可更新编号");
         require(mapper.update(table, id, data) == 1, "记录不存在"); return get(table, id);
     }
+    public void delete(String table, long id) {
+        check(table); require(mapper.delete(table, id) == 1, "记录不存在");
+    }
     private void checkColumns(Map<String, Object> data) {
         // 字段名只能含小写字母和下划线。这是名称格式检查，不是业务字段权限检查；
         // 哪些字段允许修改，仍由各业务服务挑选，不能直接把请求原样传进来。

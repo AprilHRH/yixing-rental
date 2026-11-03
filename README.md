@@ -146,6 +146,7 @@ python scripts/run.py --mysql --open
 3. 在我的订单中查看本人预约、订单进度和收退款记录。待取车且净收款为零的订单可以自行取消。
 4. 已有收款的预约需联系管理端确认退款并取消；交还车、收款和结算也由管理端处理。
 5. 在个人资料中修改姓名、电话和驾照资料。客户不能更改自己的角色、会员等级、身份证号或租赁限制。
+6. 不再使用账号时，进入个人资料底部的“注销账号”，输入当前密码并勾选确认。待取车、租赁中或待结算订单需先处理完成；注销只删除登录账号，客户档案、历史订单和收退款仍然保留。重新开通请联系管理员，不要重复注册已有证件。
 
 ### 调度、养护和系统管理
 
@@ -153,9 +154,11 @@ python scripts/run.py --mysql --open
 | --- | --- |
 | 调度车辆 | 创建任务，选择车辆、目标门店、负责人和时间；确认无预约冲突后开始，到达后完成任务。 |
 | 维修保养 | 创建工单，选择车辆、维修或保养项目及负责人；开工后车辆进入维修状态，完工时登记实际费用和下次保养条件。 |
-| 新增客户登录账号 | 先在客户管理建档，再到系统管理新增客户类型账号，关联唯一客户档案；也可让客户直接注册。 |
+| 新增登录账号 | 系统管理 → 账号与权限 → 新增账号，选择管理员、业务人员或客户。新增客户可同时填写联系方式和驾照资料建档，也可关闭“同时新建客户档案”，关联已有的唯一客户档案。 |
+| 编辑客户账号 | 在账号列表搜索姓名或账号，编辑登录名、姓名、启用状态，或重置密码。客户档案不可重新绑定到另一个人；电话、驾照等资料在客户管理修改。 |
+| 删除登录账号 | 在账号行点击删除，输入该登录账号确认。不能删除当前账号，也不能删除、禁用或降级最后一个启用的管理员；有未完成订单的客户需先处理订单。只删除登录身份，保留历史业务。 |
 | 调整提醒 | 在系统参数中设置提前提醒天数和里程，任一条件满足即可提醒。 |
-| 修改密码 | 从用户菜单进入修改密码，保存后需要重新登录；管理员也可在账号编辑中重置其他账号密码。 |
+| 修改密码 | 从用户菜单进入修改密码，保存后需要重新登录；管理员也可在账号编辑中重置其他账号密码，旧密码对应的会话会失效。 |
 | 导出备份 | 系统管理 → 数据备份与恢复 → 下载 ZIP，妥善保管数据库记录和上传图片。 |
 | 恢复备份 | 先确认已保存当前数据备份，再选择可信 ZIP，输入 `RESTORE` 确认。恢复会替换当前数据，并使全部会话失效。 |
 
@@ -247,7 +250,7 @@ python scripts/run.py --mysql --open
 | --- | --- |
 | [backend/src/main/java/com/yixing/auth/SessionFilter.java](backend/src/main/java/com/yixing/auth/SessionFilter.java) | 进入接口前校验会话、账号状态、来源和权限；客户端不能借地址访问管理端。 |
 | [backend/src/main/java/com/yixing/auth/Access.java](backend/src/main/java/com/yixing/auth/Access.java) | 获取当前操作人、检查管理员身份和记录操作日志。 |
-| [backend/src/main/java/com/yixing/auth/AccountService.java](backend/src/main/java/com/yixing/auth/AccountService.java) | 客户注册、账号重复检查，同时创建客户档案和关联账号。 |
+| [backend/src/main/java/com/yixing/auth/AccountService.java](backend/src/main/java/com/yixing/auth/AccountService.java) | 客户注册与注销、账号删除、重复检查、未完成订单拦截和最后一个管理员保护；账号事务与客户下单共用事务锁，避免注销和预约互相穿过校验。 |
 | [backend/src/main/java/com/yixing/auth/AccountUpgrade.java](backend/src/main/java/com/yixing/auth/AccountUpgrade.java) | 启动时兼容旧账号结构和旧业务人员权限。 |
 | [backend/src/main/java/com/yixing/common/Values.java](backend/src/main/java/com/yixing/common/Values.java) | 统一读取、转换和校验字符串、金额、整数与日期。 |
 | [backend/src/main/java/com/yixing/common/BusinessException.java](backend/src/main/java/com/yixing/common/BusinessException.java) | 业务条件不满足时中止操作，如租期冲突、押金不足。 |
@@ -349,6 +352,7 @@ python scripts/run.py --mysql --open
 | [backend/src/test/java/com/yixing/PricingTest.java](backend/src/test/java/com/yixing/PricingTest.java) | 计费公式及边界。 |
 | [backend/src/test/java/com/yixing/RentalWorkflowTest.java](backend/src/test/java/com/yixing/RentalWorkflowTest.java) | 租赁闭环、冲突、收退款及关联业务。 |
 | [backend/src/test/java/com/yixing/CustomerPortalTest.java](backend/src/test/java/com/yixing/CustomerPortalTest.java) | 客户注册、本人数据隔离、预约和权限。 |
+| [backend/src/test/java/com/yixing/AccountLifecycleTest.java](backend/src/test/java/com/yixing/AccountLifecycleTest.java) | 三类账号创建编辑删除、客户注销、密码及会话、事务回滚、档案与历史记录保留、最后一个管理员保护。 |
 | [frontend/src/dashboard.test.js](frontend/src/dashboard.test.js) | 待办与车辆分类逻辑、车型参考图和图片回退。 |
 | [tests/test_launcher.py](tests/test_launcher.py) | 启动器环境、服务复用、端口冲突、构建和停止逻辑的单元测试。 |
 | [tests/browser_acceptance.py](tests/browser_acceptance.py) | 启动隔离服务，验收八个业务模块和租赁流程。 |
@@ -356,6 +360,7 @@ python scripts/run.py --mysql --open
 | [tests/order_photo_acceptance.py](tests/order_photo_acceptance.py) | 订单中车辆图片展示检查。 |
 | [tests/vehicle_photo_acceptance.py](tests/vehicle_photo_acceptance.py) | 车型图片与回退检查。 |
 | [tests/revision_acceptance.py](tests/revision_acceptance.py) | 客户端及调整后的业务与权限验收。 |
+| [tests/account_acceptance.py](tests/account_acceptance.py) | 实际操作三类账号的新增、编辑、删除及客户注销，检查桌面和手机弹窗，并由浏览器验收入口调用。 |
 | [tests/check_preserved_records.py](tests/check_preserved_records.py) | 与旧数据库基线核对业务记录，仅在基线存在时使用。 |
 | [tests/launcher_cold_start.py](tests/launcher_cold_start.py) | 在隔离端口检查真实前后端冷启动；脚本还要求原项目服务已运行。 |
 | [tests/launcher_window_preview.py](tests/launcher_window_preview.py) | Windows 启动器窗口和服务复用检查，截图写入本地测试产物目录。 |
@@ -406,6 +411,7 @@ python scripts/run.py --mysql --open
 | 认证 | `POST /api/auth/register` | 仅客户注册，传账号、姓名、电话、证件和驾照资料。 |
 | 认证 | `GET /api/auth/me`、`POST /api/auth/logout` | 查询登录身份、退出。 |
 | 认证 | `POST /api/auth/password` | 传 `old_password`、`new_password`，修改后退出。 |
+| 认证 | `DELETE /api/auth/account` | 客户传当前 `password` 和 `confirmation=CLOSE` 注销本人账号，未完成订单会拦截；其他登录会话失效。 |
 | 管理端数据 | `GET /api/bootstrap`、`GET /api/dashboard` | 业务基础数据和工作台统计。 |
 | 图片 | `POST /api/uploads`、`GET /uploads/{name}` | 上传表单字段 `file`，只接收 5 MB 以内有效 PNG/JPEG；读取图片需要登录。 |
 | 车辆 | `POST /api/vehicles`、`PUT /api/vehicles/{id}` | 新增、编辑车辆档案。 |
@@ -418,7 +424,8 @@ python scripts/run.py --mysql --open
 | 养护 | `POST /api/maintenance`、`POST /api/maintenance/{id}/{action}` | 创建工单；操作为 `start`、`complete`、`cancel`。 |
 | 报表 | `GET /api/reports?from=YYYY-MM-DD&to=YYYY-MM-DD` | 区间最多 367 天。 |
 | 系统 | `GET /api/system` | 账号、系统参数和最近 300 条日志。 |
-| 账号 | `POST /api/system/users`、`PUT /api/system/users/{id}` | 创建、编辑账号；编辑时密码留空不修改。 |
+| 账号 | `POST /api/system/users`、`PUT /api/system/users/{id}` | 创建、编辑三类账号；编辑时密码留空不修改。客户新建可不传 `customer_id`，同时传姓名、电话、证件和驾照字段建档；有编号时关联已有档案。 |
+| 账号 | `DELETE /api/system/users/{id}` | 管理端传 `confirmation=DELETE` 删除登录账号，校验当前账号、最后一个管理员和客户未完成订单；保留客户档案及历史业务。 |
 | 门店 | `POST /api/system/branches`、`PUT /api/system/branches/{id}` | 创建、编辑门店。 |
 | 参数 | `PUT /api/system/settings` | 设置 `reminder_days`、`reminder_km`。 |
 | 计费参数 | `PUT /api/system/pricing/{id}` | 后端保留价格规则维护接口，不追溯改变已有订单快照。 |
@@ -545,6 +552,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-launcher.ps1
 | 提示缺少 Java、Maven、Node 或 Python | 核对安装位置与 PATH；Java 需要 JDK 21。修改环境变量后重新打开终端或启动器。 |
 | 8080/5173 被占用 | 先确认占用程序；本项目不会按端口强行关闭其他服务。已有项目服务会复用。 |
 | 另一个启动器正在管理系统 | 使用原窗口停止服务，或等待启动结束，不要直接删除锁文件强行接管。 |
+| 桌面启动器一直等待前端 | 已修复 GUI 停止指令管道被 Vite 等子进程共用的问题。更新 `scripts/run.py` 后重新打开启动器即可；超时信息会列出未就绪服务和对应的 `data/runtime/backend.log`、`frontend.log`。 |
 | 修改代码后页面没变化 | 普通启动不强制重建。停止服务后运行 `python scripts/run.py --build --open`；只开发前端可使用 `--dev`。 |
 | MySQL 连接失败 | 检查实例是否运行、端口、账号授权与环境变量；本机专用实例查看 `data/mysql/server.log`。不要公开密码配置。 |
 | 换数据库后仍看到旧数据 | 先停止原前后端再切换；启动器可能复用了原后端，且两种数据库不会自动同步。 |

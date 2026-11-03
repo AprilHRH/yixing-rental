@@ -108,6 +108,13 @@ class LauncherTests(unittest.TestCase):
             instance.close()
         self.assertEqual([call.args[0] for call in stop.call_args_list], [second, first])
 
+    def test_services_do_not_read_launcher_control_pipe(self):
+        instance = runner_module.Runner(arguments(managed=True))
+        with patch.object(runner_module.subprocess, 'Popen') as process:
+            child = instance.serve(['node', 'vite.js'], Path('.'), io.StringIO())
+        self.assertEqual(process.call_args.kwargs['stdin'], runner_module.subprocess.DEVNULL)
+        self.assertEqual(instance.children, [child])
+
     def test_exited_process_is_never_terminated(self):
         process = MagicMock()
         process.poll.return_value = 0

@@ -31,11 +31,20 @@ public class AuthController {
         if (request.getSession(false) != null) request.getSession(false).invalidate();
         request.getSession(true).setAttribute("userId", user.get("id"));
         request.getSession().setAttribute("epoch", SessionFilter.epoch());
+        request.getSession().setAttribute("passwordHash", user.get("password_hash"));
         return publicUser(user);
     }
     @PostMapping("/register") public Map<String, Object> register(@RequestBody Map<String, Object> data) { return accounts.register(data); }
     @GetMapping("/me") public Map<String, Object> me() { return publicUser(access.user()); }
     @PostMapping("/logout") public Map<String, Object> logout(HttpServletRequest request) { request.getSession().invalidate(); return map("success", true); }
+    @DeleteMapping("/account")
+    public Map<String, Object> close(@RequestBody Map<String, Object> data, HttpServletRequest request) {
+        require("CUSTOMER".equals(text(access.user(), "role")), "仅客户账号可以自行注销");
+        require("CLOSE".equals(text(data, "confirmation")), "请确认注销账号");
+        accounts.close(number(access.user(), "id"), required(data, "password", 64));
+        request.getSession().invalidate();
+        return map("success", true);
+    }
     @PostMapping("/password")
     public Map<String, Object> password(@RequestBody Map<String, Object> data, HttpServletRequest request) {
         // 改密需验证原密码，保存新哈希后注销当前会话，要求重新登录。

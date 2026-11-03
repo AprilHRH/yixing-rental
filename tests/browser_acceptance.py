@@ -10,6 +10,7 @@ import time
 from playwright.sync_api import sync_playwright, expect
 from dashboard_acceptance import verify_dashboard
 from revision_acceptance import verify_revision
+from account_acceptance import verify_accounts
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -60,9 +61,9 @@ def main():
             try:
                 flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
                 database_url = os.environ.get('BROWSER_DATABASE_URL', 'jdbc:h2:mem:browser;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1')
-                children.append(subprocess.Popen([java, '-jar', str(ROOT / 'backend/target/rental-system-1.0.0.jar'), '--server.port=8081', '--spring.datasource.url=' + database_url, '--app.allowed-origins=' + BASE], cwd=directory, stdout=backend_log, stderr=subprocess.STDOUT, creationflags=flags))
+                children.append(subprocess.Popen([java, '-jar', str(ROOT / 'backend/target/rental-system-1.0.0.jar'), '--server.port=8081', '--spring.datasource.url=' + database_url, '--app.allowed-origins=' + BASE], cwd=directory, stdin=subprocess.DEVNULL, stdout=backend_log, stderr=subprocess.STDOUT, creationflags=flags))
                 environment = {**os.environ, 'FRONTEND_PORT': '5174', 'API_TARGET': 'http://127.0.0.1:8081'}
-                children.append(subprocess.Popen([node, str(ROOT / 'frontend/node_modules/vite/bin/vite.js')], cwd=ROOT / 'frontend', env=environment, stdout=frontend_log, stderr=subprocess.STDOUT, creationflags=flags))
+                children.append(subprocess.Popen([node, str(ROOT / 'frontend/node_modules/vite/bin/vite.js')], cwd=ROOT / 'frontend', env=environment, stdin=subprocess.DEVNULL, stdout=frontend_log, stderr=subprocess.STDOUT, creationflags=flags))
                 wait_port(8081, children[0]); wait_port(5174, children[1])
                 with sync_playwright() as playwright:
                     launch = {'headless': True, 'args': ['--disable-gpu']}
@@ -82,6 +83,7 @@ def main():
                         visit(page, route, title)
                         results.append(title + '页面加载及布局检查')
                     verify_revision(page, BASE, browser, results, ARTIFACTS)
+                    verify_accounts(page, BASE, browser, results, ARTIFACTS)
                     visit(page, '/pricing', '租金计算')
                     page.get_by_role('button', name='计算预计租金').click()
                     expect(page.locator('.calculator-result')).to_be_visible()

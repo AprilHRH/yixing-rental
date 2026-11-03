@@ -49,6 +49,7 @@ public class ApiController {
     @GetMapping("/system") public Map<String, Object> system() { return system.overview(); }
     @PostMapping("/system/users") public Map<String, Object> user(@RequestBody Map<String, Object> input) { return system.user(null, input); }
     @PutMapping("/system/users/{id}") public Map<String, Object> user(@PathVariable long id, @RequestBody Map<String, Object> input) { return system.user(id, input); }
+    @DeleteMapping("/system/users/{id}") public Map<String, Object> deleteUser(@PathVariable long id, @RequestBody Map<String, Object> input) { return system.deleteUser(id, input); }
     @PutMapping("/system/pricing/{id}") public Map<String, Object> pricing(@PathVariable long id, @RequestBody Map<String, Object> input) { return system.pricing(id, input); }
     @PostMapping("/system/branches") public Map<String, Object> branch(@RequestBody Map<String, Object> input) { return system.branch(null, input); }
     @PutMapping("/system/branches/{id}") public Map<String, Object> branch(@PathVariable long id, @RequestBody Map<String, Object> input) { return system.branch(id, input); }

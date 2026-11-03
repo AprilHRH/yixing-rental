@@ -71,7 +71,7 @@ def ensure():
                  '--datadir=' + str(data), '--port=3307', '--bind-address=127.0.0.1',
                  '--mysqlx=OFF', '--local-infile=OFF', '--secure-file-priv=NULL',
                  '--init-file=' + str(bootstrap), '--log-error=' + str(HOME / 'server.log')],
-                stdout=log, stderr=log, creationflags=FLAGS)
+                stdin=subprocess.DEVNULL, stdout=log, stderr=log, creationflags=FLAGS)
         finally:
             log.close()
         for _ in range(120):

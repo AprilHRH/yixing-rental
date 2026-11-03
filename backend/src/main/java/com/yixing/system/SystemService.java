@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yixing.auth.Access;
 import com.yixing.auth.AuthController;
+import com.yixing.auth.AccountService;
+import com.yixing.customer.CustomerService;
 import com.yixing.data.Store;
 import java.io.*;
 import java.nio.file.*;
@@ -20,17 +22,19 @@ import static com.yixing.common.Values.*;
 
 @Service
 public class SystemService {
-    private final Store store; private final Access access; private final JdbcTemplate jdbc; private final ObjectMapper json; private final TransactionTemplate transactions;
+    private final Store store; private final Access access; private final JdbcTemplate jdbc; private final ObjectMapper json; private final TransactionTemplate transactions; private final AccountService accounts; private final CustomerService customers;
     private static final List<String> TABLES = List.of("sys_user", "branch", "pricing_rule", "vehicle", "customer", "rental_order", "payment_record", "dispatch_task", "maintenance_record", "settings", "operation_log");
-    public SystemService(Store store, Access access, JdbcTemplate jdbc, ObjectMapper json, org.springframework.transaction.PlatformTransactionManager manager) { this.store = store; this.access = access; this.jdbc = jdbc; this.json = json; this.transactions = new TransactionTemplate(manager); }
+    public SystemService(Store store, Access access, JdbcTemplate jdbc, ObjectMapper json, org.springframework.transaction.PlatformTransactionManager manager, AccountService accounts, CustomerService customers) { this.store = store; this.access = access; this.jdbc = jdbc; this.json = json; this.transactions = new TransactionTemplate(manager); this.accounts = accounts; this.customers = customers; }
     public Map<String, Object> overview() {
         return map("users", store.list("sys_user").stream().map(AuthController::publicUser).toList(), "settings", store.get("settings", 1), "logs", store.list("operation_log").stream().limit(300).toList());
     }
     @Transactional
     public Map<String, Object> user(Long id, Map<String, Object> input) {
         access.admin();
+        accounts.lockAccounts();
+        Map<String, Object> existing = id == null ? null : store.lock("sys_user", id);
         String role = text(input, "role"), username = required(input, "username", 50);
-        new com.yixing.auth.AccountService(store).username(input, id);
+        accounts.username(input, id);
         require(Set.of("ADMIN", "CUSTOMER").contains(role) && username.matches("[a-zA-Z0-9_]{3,30}"), "角色或账号格式不正确");
         Map<String, Object> data = map("username", username, "name", required(input, "name", 60), "role", role, "enabled", flag(input, "enabled"));
         String accountType = "CUSTOMER".equals(role) ? "CUSTOMER" : text(input, "account_type");
@@ -38,20 +42,41 @@ public class SystemService {
         if (accountType.isBlank()) accountType = "ADMIN";
         require(Set.of("ADMIN", "STAFF", "CUSTOMER").contains(accountType) && (!"ADMIN".equals(role) || !"CUSTOMER".equals(accountType)), "账号类型不正确");
         data.put("account_type", accountType);
+        if (existing != null) {
+            accounts.keepAdministrator(existing, data);
+            // 客户账号保持原档案关联，避免将历史订单转交给另一个登录身份。
+            if (existing.get("customer_id") != null) require("CUSTOMER".equals(role) && number(input, "customer_id") == number(existing, "customer_id"), "客户账号不可更换身份或客户档案");
+        }
         if ("CUSTOMER".equals(role)) {
-            long customerId = number(input, "customer_id"); store.lock("customer", customerId);
+            long customerId;
+            if (input.get("customer_id") == null && id == null) {
+                Map<String, Object> profile = map("name", data.get("name"), "phone", input.get("phone"), "identity_no", input.get("identity_no"), "license_no", input.get("license_no"), "license_expiry", input.get("license_expiry"), "category", "NORMAL", "restricted", false, "notes", "");
+                customerId = number(customers.save(null, profile), "id");
+            } else customerId = number(input, "customer_id");
+            store.lock("customer", customerId);
             require(store.list("sys_user").stream().noneMatch(user -> user.get("customer_id") != null && number(user, "customer_id") == customerId && (id == null || number(user, "id") != id)), "该客户已有登录账号");
             data.put("customer_id", customerId);
+            store.update("customer", customerId, map("name", data.get("name")));
         } else data.put("customer_id", null);
         if (id == null || !text(input, "password").isBlank()) {
             String password = required(input, "password", 64); require(password.length() >= 8, "密码至少 8 位"); data.put("password_hash", new BCryptPasswordEncoder().encode(password));
         }
         if (id != null) {
-            store.lock("sys_user", id);
             require(id != number(access.user(), "id") || (role.equals("ADMIN") && flag(input, "enabled")), "不能禁用自己或移除自己的管理员权限");
         }
         Map<String, Object> user = id == null ? store.insert("sys_user", data) : store.update("sys_user", id, data);
         access.log("管理用户", username); return AuthController.publicUser(user);
+    }
+    @Transactional
+    public Map<String, Object> deleteUser(long id, Map<String, Object> input) {
+        access.admin();
+        require("DELETE".equals(text(input, "confirmation")), "请确认删除账号");
+        accounts.lockAccounts();
+        // 使用加锁读取，避免提前建立旧快照而漏掉等待客户锁期间刚提交的订单。
+        Map<String, Object> target = store.lock("sys_user", id);
+        accounts.deleteManaged(id, number(access.user(), "id"));
+        access.log("删除登录账号", text(target, "username"));
+        return map("success", true);
     }
     @Transactional
     public Map<String, Object> pricing(long id, Map<String, Object> input) {
@@ -124,7 +149,7 @@ public class SystemService {
             restored.put(table, records);
         }
         require(restored.get("settings").size() == 1 && number(restored.get("settings").getFirst(), "id") == 1, "备份缺少系统配置");
-        require(restored.get("sys_user").stream().anyMatch(user -> "ADMIN".equals(text(user, "role")) && flag(user, "enabled")), "备份须保留有效管理员");
+        require(restored.get("sys_user").stream().anyMatch(accounts::administrator), "备份须保留有效管理员");
         Path uploads = Path.of("uploads"); Files.createDirectories(uploads);
         for (Map.Entry<String, byte[]> entry : images.entrySet()) {
             Path target = uploads.resolve(entry.getKey());

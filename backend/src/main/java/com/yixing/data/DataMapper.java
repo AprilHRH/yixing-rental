@@ -20,4 +20,6 @@ public interface DataMapper {
     int insert(@Param("table") String table, @Param("data") Map<String, Object> data);
     @UpdateProvider(type = Statements.class, method = "update")
     int update(@Param("table") String table, @Param("id") long id, @Param("data") Map<String, Object> data);
+    @Delete("DELETE FROM ${table} WHERE id = #{id}")
+    int delete(@Param("table") String table, @Param("id") long id);
 }

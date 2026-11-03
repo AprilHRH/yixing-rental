@@ -104,7 +104,7 @@ class Runner:
 
     def build(self, command, directory):
         with (self.runtime / 'build.log').open('a', encoding='utf-8') as log:
-            process = subprocess.Popen(command, cwd=directory, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace', creationflags=self.flags)
+            process = subprocess.Popen(command, cwd=directory, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace', creationflags=self.flags)
             self.children.append(process)
             def output():
                 for line in process.stdout:
@@ -143,7 +143,8 @@ class Runner:
             self.build([tools['maven'], '-f', str(ROOT / 'backend/pom.xml'), 'package'], ROOT)
 
     def serve(self, arguments, directory, log):
-        process = subprocess.Popen(arguments, cwd=directory, stdout=log, stderr=subprocess.STDOUT, creationflags=self.flags)
+        # GUI 启动器的 stdin 是停止指令管道，不能让 Vite 等子进程一起读取它。
+        process = subprocess.Popen(arguments, cwd=directory, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, creationflags=self.flags)
         self.children.append(process)
         return process
 
@@ -232,7 +233,8 @@ class Runner:
                     if any(process.poll() is not None for process in services):
                         raise RuntimeError('服务意外退出，请查看 data/runtime 中的前后端日志。')
                     if time.monotonic() > deadline:
-                        raise RuntimeError('等待服务就绪超时，请查看 data/runtime 中的日志。')
+                        pending = [name for name, ready in service_state().items() if not ready]
+                        raise RuntimeError('等待服务就绪超时，未就绪：' + '、'.join(pending) + '。请查看 data/runtime/backend.log 和 frontend.log。')
                 self.ready(True)
                 self.announce('停止按钮或 Ctrl+C 只会关闭本次启动的服务。日志：data/runtime/')
                 while not self.stopping.wait(.5):
