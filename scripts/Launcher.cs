@@ -16,6 +16,8 @@ internal sealed class RentalLauncher : Form
     private readonly Button open = new Button();
     private readonly Button stop = new Button();
     private readonly TextBox output = new TextBox();
+    private readonly Label address = new Label();
+    private string pageUrl = "http://127.0.0.1:5173/";
     private readonly bool openAutomatically;
     private Process runner;
     private bool ready;
@@ -46,7 +48,10 @@ internal sealed class RentalLauncher : Form
         status.Text = "准备就绪，点击下方按钮启动系统。";
         status.Font = new Font(Font.FontFamily, 10F, FontStyle.Bold);
         status.AccessibleName = "启动状态";
-        Label address = new Label { Text = "http://127.0.0.1:5173/", AutoSize = true, Location = new Point(30, 150), ForeColor = Color.FromArgb(37, 99, 235) };
+        address.Text = pageUrl;
+        address.AutoSize = true;
+        address.Location = new Point(30, 150);
+        address.ForeColor = Color.FromArgb(37, 99, 235);
         ConfigureButton(start, "启动并打开系统", 30, 190, 214);
         start.BackColor = orange;
         start.ForeColor = Color.White;
@@ -99,6 +104,16 @@ internal sealed class RentalLauncher : Form
     private void Append(string text)
     {
         if (String.IsNullOrEmpty(text)) return;
+        if (text.StartsWith("::url::"))
+        {
+            Uri target;
+            if (Uri.TryCreate(text.Substring(7), UriKind.Absolute, out target) && target.Scheme == "http" && target.Host == "127.0.0.1")
+            {
+                pageUrl = target.AbsoluteUri;
+                address.Text = pageUrl;
+            }
+            return;
+        }
         if (text.StartsWith("::ready::"))
         {
             // Python 启动脚本会说明服务是否归本窗口管理，复用的外部服务不能被停止。
@@ -208,7 +223,7 @@ internal sealed class RentalLauncher : Form
         catch (IOException error) { Append(error.Message); }
     }
 
-    private void OpenPage() { ShellOpen("http://127.0.0.1:5173/"); }
+    private void OpenPage() { ShellOpen(pageUrl); }
 
     private void ShellOpen(string target)
     {

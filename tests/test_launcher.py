@@ -20,6 +20,44 @@ def arguments(**changes):
 
 
 class LauncherTests(unittest.TestCase):
+    def test_system_reserved_port_uses_fallback(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(runner_module, 'ROOT', Path(directory)), patch.object(runner_module, 'occupied', return_value=False), patch.object(runner_module, 'can_bind', side_effect=[False, True]):
+            self.assertEqual(runner_module.choose_frontend_port(), 15173)
+
+    def test_explicit_reserved_port_has_actionable_error(self):
+        with patch.object(runner_module, 'occupied', return_value=False), patch.object(runner_module, 'can_bind', return_value=False):
+            with self.assertRaisesRegex(RuntimeError, '--frontend-port'):
+                runner_module.choose_frontend_port(5173)
+
+    def test_occupied_default_is_checked_not_silently_switched(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(runner_module, 'ROOT', Path(directory)), patch.object(runner_module, 'occupied', return_value=True), patch.object(runner_module, 'can_bind') as bind:
+            self.assertEqual(runner_module.choose_frontend_port(), 5173)
+            bind.assert_not_called()
+
+    def test_running_fallback_is_reused(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(runner_module, 'ROOT', Path(directory)):
+            runtime = Path(directory) / 'data/runtime'
+            runtime.mkdir(parents=True)
+            (runtime / 'frontend-port.json').write_text('{"port":15173}', encoding='utf-8')
+            with patch.object(runner_module, 'occupied', return_value=True), patch.object(runner_module, 'frontend_ready', return_value=True):
+                self.assertEqual(runner_module.choose_frontend_port(), 15173)
+            with patch.object(runner_module, 'occupied', return_value=False), patch.object(runner_module, 'can_bind', return_value=True):
+                self.assertEqual(runner_module.choose_frontend_port(), 5173)
+
+    def test_untrusted_saved_port_is_ignored(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(runner_module, 'ROOT', Path(directory)):
+            runtime = Path(directory) / 'data/runtime'
+            runtime.mkdir(parents=True)
+            (runtime / 'frontend-port.json').write_text('{"port":true}', encoding='utf-8')
+            with patch.object(runner_module, 'occupied', return_value=False), patch.object(runner_module, 'can_bind', return_value=True):
+                self.assertEqual(runner_module.choose_frontend_port(), 5173)
+
+    def test_backend_origin_probe_handles_allowed_and_denied(self):
+        for status, expected in [(400, True), (403, False)]:
+            error = HTTPError('http://localhost', status, '', {}, io.BytesIO(b'{}'))
+            with patch.object(runner_module.HTTP, 'open', side_effect=error):
+                self.assertEqual(runner_module.backend_accepts_origin(), expected)
+
     def test_backend_requires_expected_auth_response(self):
         with patch.object(runner_module, 'read_url', return_value=(401, '{"message":"请先登录"}')):
             self.assertTrue(runner_module.backend_ready())

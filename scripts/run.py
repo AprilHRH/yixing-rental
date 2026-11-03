@@ -9,7 +9,8 @@ import sys
 import threading
 import time
 from urllib.error import HTTPError, URLError
-from urllib.request import build_opener, ProxyHandler
+from urllib.parse import urlsplit
+from urllib.request import build_opener, ProxyHandler, Request
 import webbrowser
 
 
@@ -44,9 +45,51 @@ def backend_ready():
         return False
 
 
-def frontend_ready():
-    status, body = read_url(URL)
+def frontend_ready(url=None):
+    status, body = read_url(url or URL)
     return status == 200 and '<title>易行租车 · 车辆租赁管理系统</title>' in body
+
+
+def frontend_port():
+    return urlsplit(URL).port or 5173
+
+
+def can_bind(port):
+    try:
+        with socket.socket() as connection:
+            connection.bind(('127.0.0.1', port))
+        return True
+    except PermissionError:
+        # Windows 的系统保留端口没有监听进程，但仍然禁止普通应用绑定。
+        return False
+
+
+def choose_frontend_port(requested=None):
+    if requested is None:
+        try:
+            saved = json.loads((ROOT / 'data/runtime/frontend-port.json').read_text(encoding='utf-8'))['port']
+            if type(saved) is int and 1 <= saved <= 65535 and saved != 5173 and occupied(saved) and frontend_ready(f'http://127.0.0.1:{saved}/'):
+                return saved
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+    candidates = [requested] if requested is not None else [5173, 15173, 25173]
+    for port in candidates:
+        # 被其他应用占用时交给后面的身份检查报错，不停止或接管那个应用。
+        if occupied(port) or can_bind(port):
+            return port
+    raise RuntimeError('前端端口被系统保留或禁止绑定，请用 --frontend-port 指定可用端口。')
+
+
+def backend_accepts_origin():
+    request = Request('http://127.0.0.1:8080/api/auth/login', b'{}', headers={
+        'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'Origin': URL.rstrip('/')})
+    try:
+        with HTTP.open(request, timeout=3):
+            return True
+    except HTTPError as error:
+        return error.code == 400
+    except (OSError, URLError):
+        return False
 
 
 def service_state():
@@ -151,6 +194,7 @@ class Runner:
     def ready(self, owned):
         self.announce('系统已就绪：' + URL)
         if self.arguments.managed:
+            self.announce('::url::' + URL)
             self.announce('::ready::' + ('owned' if owned else 'external'))
         if self.arguments.open:
             webbrowser.open(URL)
@@ -172,7 +216,7 @@ class Runner:
     def run(self):
         existing = service_state()
         # 已有本项目服务可以复用；端口被其他程序占用时说明原因并停止启动。
-        for name, port in [('backend', 8080), ('frontend', 5173)]:
+        for name, port in [('backend', 8080), ('frontend', frontend_port())]:
             if occupied(port) and not existing[name]:
                 raise RuntimeError('端口 ' + str(port) + ' 被其他程序占用；请手动检查，不会自动关闭该程序。')
         if self.arguments.build and any(existing.values()):
@@ -181,6 +225,10 @@ class Runner:
             self.announce('检测到系统已在运行，直接复用，不会重复启动或停止原有服务。')
             self.ready(False)
             return
+        if frontend_port() != 5173 and existing['backend'] and not backend_accepts_origin():
+            raise RuntimeError('现有后端尚未允许新的前端地址，请先通过原启动器停止后端，再重新启动。')
+        if frontend_port() != 5173:
+            self.announce('前端使用端口 ' + str(frontend_port()) + '，默认端口可能被系统保留。')
         if self.arguments.managed:
             self.listen()
         tools = resolve_tools()
@@ -218,13 +266,16 @@ class Runner:
                         self.announce('使用本机 MySQL ' + version + '（127.0.0.1:3307）。')
                     if use_mysql:
                         arguments.append('--spring.profiles.active=mysql')
+                    arguments.append('--app.allowed-origins=' + ','.join([
+                        URL.rstrip('/'), f'http://localhost:{frontend_port()}',
+                        'http://127.0.0.1:8080', 'http://localhost:8080']))
                     services.append(self.serve(arguments, ROOT, backend_log))
                 if not existing['frontend']:
                     self.announce('正在启动前端服务……')
                     arguments = [tools['node'], str(ROOT / 'frontend/node_modules/vite/bin/vite.js')]
                     if not self.arguments.dev:
                         arguments.append('preview')
-                    arguments.extend(['--host', '127.0.0.1', '--port', '5173', '--strictPort'])
+                    arguments.extend(['--host', '127.0.0.1', '--port', str(frontend_port()), '--strictPort'])
                     services.append(self.serve(arguments, ROOT / 'frontend', frontend_log))
                 deadline = time.monotonic() + 120
                 while not all(service_state().values()):
@@ -248,6 +299,7 @@ class Runner:
 
 
 def main():
+    global URL
     if hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     parser = argparse.ArgumentParser(description='易行租车快速启动')
@@ -258,13 +310,24 @@ def main():
     parser.add_argument('--open', action='store_true', help='就绪后自动打开浏览器')
     parser.add_argument('--managed', action='store_true', help='由桌面启动器管理，stdin 接收 stop 指令')
     parser.add_argument('--check', action='store_true', help='只检查服务状态，不安装、启动或停止服务')
+    parser.add_argument('--frontend-port', type=int, help='指定本机前端端口，默认自动避开系统保留端口')
     arguments = parser.parse_args()
     if arguments.mysql and arguments.h2:
         parser.error('--mysql 与 --h2 不能同时使用')
+    if arguments.frontend_port is not None and not 1 <= arguments.frontend_port <= 65535:
+        parser.error('--frontend-port 必须在 1 到 65535 之间')
+    try:
+        URL = f'http://127.0.0.1:{choose_frontend_port(arguments.frontend_port)}/'
+    except (OSError, RuntimeError) as error:
+        print('启动失败：' + str(error))
+        return 1
     if arguments.check:
         status = service_state()
         print(json.dumps({'url': URL, 'ready': all(status.values()), **status}, ensure_ascii=False))
         return 0 if all(status.values()) else 1
+    runtime = ROOT / 'data/runtime'
+    runtime.mkdir(parents=True, exist_ok=True)
+    (runtime / 'frontend-port.json').write_text(json.dumps({'port': frontend_port()}), encoding='utf-8')
     runner = Runner(arguments)
     try:
         runner.run()
