@@ -4,7 +4,7 @@ from playwright.sync_api import sync_playwright, expect
 from ui_preview import fingerprint
 
 ROOT = Path(__file__).resolve().parents[1]
-ARTIFACTS = ROOT / 'docs/previews'
+ARTIFACTS = ROOT / 'data/test-artifacts/revision-preview'
 BASE = 'http://127.0.0.1:5173'
 
 
@@ -15,6 +15,7 @@ def ready(page):
 
 
 def main():
+    ARTIFACTS.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as runtime:
         browser = runtime.chromium.launch(channel='msedge', headless=True)
         context = browser.new_context(viewport={'width': 1451, 'height': 1000})
@@ -68,7 +69,7 @@ def main():
         assert not errors, errors
         assert not resources, resources
         result = {'url': BASE, 'source': 'built production preview, real persistent business database', 'checks': checks, 'business_data_unchanged': True, 'errors': errors, 'failed_resources': resources, 'note': 'Customer registration form previewed without submitting; full customer workflows run against isolated H2 in browser_acceptance.py'}
-        (ROOT / 'tests/revision-preview-results.json').write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
+        (ARTIFACTS / 'results.json').write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
         print(json.dumps(result, ensure_ascii=False, indent=2))
         context.close()
         browser.close()

@@ -6,7 +6,7 @@ from playwright.sync_api import sync_playwright, expect
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = 'http://127.0.0.1:5173'
-ARTIFACTS = ROOT / 'docs/previews'
+ARTIFACTS = ROOT / 'data/test-artifacts/color-preview'
 
 
 def contrast(foreground, background):
@@ -23,6 +23,7 @@ def fingerprint(data):
 
 
 def main():
+    ARTIFACTS.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as runtime:
         browser = runtime.chromium.launch(channel='msedge', headless=True)
         page = browser.new_page(viewport={'width': 1451, 'height': 900})

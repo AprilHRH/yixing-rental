@@ -41,7 +41,9 @@ def main():
         assert original == actual, table
         counts[key] = len(actual)
     result = {'business_records_unchanged_from_pre_upgrade_database': True, 'counts': counts, 'account_change': 'STAFF promoted to ADMIN role with STAFF account_type; existing credentials preserved'}
-    (ROOT / 'tests/data-preservation-results.json').write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
+    artifacts = ROOT / 'data/test-artifacts/data-preservation'
+    artifacts.mkdir(parents=True, exist_ok=True)
+    (artifacts / 'results.json').write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 

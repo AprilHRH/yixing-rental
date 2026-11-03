@@ -13,7 +13,12 @@ uploads/
 __pycache__/
 
 /tmp/
-/docs/previews/video/
+# 只提交当前版本的说明截图，测试截图、录屏和结果放在 /data/ 下。
+/docs/previews/*
+!/docs/previews/current/
+/tests/*-results.json
+# 阶段性报告归档在上面的实训资料目录，不再放入代码文档。
+/docs/*报告*.md
 /*.png
 .env.*
 !.env.example

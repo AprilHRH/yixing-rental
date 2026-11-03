@@ -14,7 +14,7 @@ from revision_acceptance import verify_revision
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = 'http://127.0.0.1:5174'
-ARTIFACTS = Path(os.environ.get('BROWSER_ARTIFACTS', str(ROOT / 'docs/previews')))
+ARTIFACTS = Path(os.environ.get('BROWSER_ARTIFACTS', str(ROOT / 'data/test-artifacts/browser')))
 
 
 def wait_port(port, process):
@@ -170,7 +170,9 @@ def main():
                     assert not errors, errors
                     staff.close(); context.close(); browser.close()
                 report = {'passed': len(results), 'checks': results, 'browser_errors': errors, 'database': 'isolated MySQL; demo database unchanged' if database_url.startswith('jdbc:mysql:') else 'isolated in-memory H2; demo database unchanged'}
-                Path(os.environ.get('BROWSER_RESULTS', str(ROOT / 'tests/browser-results.json'))).write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
+                result_path = Path(os.environ.get('BROWSER_RESULTS', str(ARTIFACTS / 'results.json')))
+                result_path.parent.mkdir(parents=True, exist_ok=True)
+                result_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
                 print(json.dumps(report, ensure_ascii=False, indent=2))
             except Exception:
                 print((directory / 'backend.log').read_text(encoding='utf-8', errors='replace')[-3000:])

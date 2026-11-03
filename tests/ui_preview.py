@@ -8,7 +8,7 @@ from order_photo_acceptance import verify_order_photos
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ARTIFACTS = ROOT / 'docs/previews'
+ARTIFACTS = ROOT / 'data/test-artifacts/ui-preview'
 BASE = 'http://127.0.0.1:5173'
 
 
@@ -19,6 +19,7 @@ def fingerprint(data):
 
 
 def main():
+    ARTIFACTS.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as runtime:
         browser = runtime.chromium.launch(executable_path='C:/Program Files (x86)/Microsoft/Edge/Application/157.0.4341.24/msedge.exe', headless=True)
         context = browser.new_context(viewport={'width': 1440, 'height': 1000}, device_scale_factor=1)
@@ -74,7 +75,7 @@ def main():
         assert not errors, errors
         assert not failed_requests, failed_requests
         result = {'order_checks': order_checks, 'vehicle_checks': vehicle_checks, 'url': BASE, 'source': 'built production preview; existing persistent database', 'business_data_unchanged': baseline == after, 'keyboard_filter': 'Tab and Enter verified', 'photography': 'local WebP assets; login and dashboard loaded', 'task_photos': 'vehicle records first, clearly labeled local model references as fallback; loaded', 'homepage_footer': 'removed from DOM', 'chart_canvas': 'centered fleet donut, lower legend and revenue bars rendered', 'design_reference': 'updated user direction; photographic blue-slate navigation, clear blue-white surfaces and burnt-orange actions' , 'mobile': '390px; responsive order cards; no page overflow', 'browser_errors': errors, 'failed_resources': failed_requests, 'screenshots': ['ui-login-final.png', 'ui-dashboard-final.png', 'ui-dispatch-final.png', 'ui-vehicles-final.png', 'ui-vehicles-page-2.png', 'ui-vehicles-viewport.png', 'ui-vehicle-detail-final.png', 'ui-vehicles-mobile-final.png', 'ui-orders-final.png', 'ui-order-detail-final.png', 'ui-order-vehicle-picker.png', 'ui-orders-mobile-final.png', 'vehicle-photo-catalog.png', 'ui-mobile-final.png']}
-        (ROOT / 'tests/ui-preview-results.json').write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
+        (ARTIFACTS / 'results.json').write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
         storage = context.storage_state()
         context.close()
 
@@ -113,7 +114,7 @@ def main():
         video_name = 'ui-operations-walkthrough-' + datetime.now().strftime('%Y%m%d-%H%M%S') + '.webm'
         video_path.rename(ARTIFACTS / 'video' / video_name)
         result['video'] = 'video/' + video_name
-        (ROOT / 'tests/ui-preview-results.json').write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
+        (ARTIFACTS / 'results.json').write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
         browser.close()
         print(json.dumps(result, ensure_ascii=False, indent=2))
 

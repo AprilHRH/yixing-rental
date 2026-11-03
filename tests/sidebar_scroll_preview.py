@@ -3,9 +3,11 @@ from playwright.sync_api import sync_playwright, expect
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = 'http://127.0.0.1:5173'
+ARTIFACTS = ROOT / 'data/test-artifacts/sidebar-preview'
 
 
 def main():
+    ARTIFACTS.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as runtime:
         browser = runtime.chromium.launch(channel='msedge', headless=True)
         page = browser.new_page(viewport={'width': 1451, 'height': 783})
@@ -26,7 +28,7 @@ def main():
         hover = sidebar.evaluate('element => getComputedStyle(element,"::-webkit-scrollbar-thumb").backgroundColor')
         assert hover != initial['thumb'], (initial, hover)
         assert sidebar.evaluate('element => element.getBoundingClientRect().width') == initial['width']
-        page.screenshot(path=str(ROOT / 'docs/previews/sidebar-scrollbar.png'), full_page=False)
+        page.screenshot(path=str(ARTIFACTS / 'sidebar-scrollbar.png'), full_page=False)
         for height in [783, 560]:
             page.set_viewport_size({'width': 1451, 'height': height})
             sidebar.evaluate('element => element.scrollTop = 0')

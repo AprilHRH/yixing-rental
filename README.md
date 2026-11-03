@@ -79,18 +79,20 @@ python scripts/run.py --build
 前端采用 Vue 3、Element Plus、Axios、ECharts、Vite；后端采用 Spring Boot、MyBatis，认证采用服务端会话，密码采用 BCrypt 哈希。
 
 - `frontend/src/views/`：工作台、登录及八个独立业务页面。
-- `frontend/src/components/`：状态标签、图表、通用表单弹窗、车辆插画。
+- `frontend/src/components/`：状态标签、图表、通用表单弹窗与车辆图文组件。
 - `backend/src/main/java/com/yixing/`：按认证、车辆、客户、订单、计费、调度、维修、报表、系统等业务包区分。
 - `backend/src/test/java/com/yixing/`：计费单元测试与业务集成测试。
-- `database/`：H2 和 MySQL 数据库结构脚本。
+- `backend/src/main/resources/`：应用实际加载的数据库结构脚本和配置，避免另存重复脚本。
 - `scripts/`：项目启动脚本。
-- `tests/`：独立浏览器验收脚本、测试依赖、验收结果。
-- `docs/`：接口、协作、UI 规范、验收报告、最新界面截图和快速启动说明。
+- `tests/`：独立浏览器验收脚本和测试依赖，运行结果写入已忽略的 `data/`。
+- `docs/`：主要文件导览、接口、协作、UI 规范、当前界面截图和快速启动说明。
 - `.github/`：PR 提交检查模板。
 
 GitHub 仓库：https://github.com/AprilHRH/yixing-rental（私有，需要仓库访问权限）。团队可克隆同一个仓库，按 `docs/团队协作.md` 创建任务分支、提交和发起 PR。
 
 仓库保留源码、依赖锁文件、数据库结构、车型素材及项目文档；本地数据库、上传文件、依赖目录、构建产物、工具包、临时文件和测试录屏不上传。首次运行会独立初始化演示数据。
+
+按后端、前端和 UI 查找代码，可阅读 [项目主要文件说明](docs/项目主要文件说明.md)。历史截图、阶段性报告和旧测试结果仅在本机实训资料目录归档，不作为当前版本说明。
 
 ## 四、数据库说明
 
@@ -165,7 +167,7 @@ python scripts/run.py --mysql
 6. 确认线下补款或退款后结算，检查费用和收退款记录。
 7. 查看统计报表的收入变化。
 8. 为其他空闲车辆创建调度或保养工单，观察状态与门店变化。
-9. 切换业务人员账号，验证系统管理和经营报表不可访问。
+9. 切换业务人员账号，验证其具有相同管理权限；切换客户账号，验证其无法访问管理端数据。
 
 ## 七、运行测试
 
@@ -193,6 +195,8 @@ python tests/browser_acceptance.py
 
 验收脚本使用独立的 8081 后端、5174 前端及内存数据库，验证八个页面和租赁闭环，不修改主演示数据。需要这两个端口空闲，且后端 JAR 已构建。Windows 优先使用已安装的 Edge，也可使用 Playwright Chromium。
 
+普通浏览器验收的截图、录屏和结果保存在 `data/test-artifacts/browser/`，结果文件为 `results.json`。执行 `python scripts/test_mysql.py --browser` 时，MySQL 验收产物保存在 `data/mysql/`。这些都是本地运行结果，不提交 Git，也不以旧结果代替本次测试。
+
 ## 八、截图与文档
 
 以下截图更新于 **2026-10-29**，来自当前实际运行版本：暖橙透明摄影菜单、明亮数字和亮色车辆状态环图。
@@ -209,8 +213,7 @@ python tests/browser_acceptance.py
 - [接口说明](docs/接口说明.md)
 - [团队协作与完成标准](docs/团队协作.md)
 - [UI 设计规范](docs/UI设计规范.md)
-- [验收报告](docs/验收报告.md)
-- [浏览器验收结果](tests/browser-results.json)
+- [项目主要文件说明](docs/项目主要文件说明.md)
 
 ## 九、使用边界
 
