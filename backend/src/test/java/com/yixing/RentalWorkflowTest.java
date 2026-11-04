@@ -24,7 +24,7 @@ class RentalWorkflowTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper json;
     MockHttpSession session;
-    @BeforeEach void login() throws Exception { session = loginAs("admin", "Admin@12345"); }
+    @BeforeEach void login() throws Exception { session = loginAs("admin", "88888888"); }
     MockHttpSession loginAs(String username, String password) throws Exception {
         MvcResult result = mvc.perform(post("/api/auth/login").header("X-Requested-With", "XMLHttpRequest").contentType("application/json").content(json.writeValueAsBytes(map("username", username, "password", password)))).andReturn();
         assertEquals(200, result.getResponse().getStatus()); return (MockHttpSession) result.getRequest().getSession();
@@ -49,7 +49,7 @@ class RentalWorkflowTest {
     }
     @Test void authenticationAndRoleProtection() throws Exception {
         assertEquals(401, mvc.perform(get("/api/bootstrap")).andReturn().getResponse().getStatus());
-        MockHttpSession staff = loginAs("staff", "Staff@12345");
+        MockHttpSession staff = loginAs("staff", "88888888");
         assertEquals(200, mvc.perform(get("/api/system").session(staff)).andReturn().getResponse().getStatus());
         assertEquals(200, mvc.perform(get("/api/reports?from=2026-01-01&to=2026-01-10").session(staff)).andReturn().getResponse().getStatus());
         Map<String, Object> staffVehicle = vehicle();
@@ -126,7 +126,7 @@ class RentalWorkflowTest {
         int before = ((List<?>) bootstrap().get("customers")).size(); customer();
         MvcResult restored = mvc.perform(multipart("/api/system/restore").file(new MockMultipartFile("file", "backup.zip", "application/zip", backup)).param("confirmation", "RESTORE").session(session).header("X-Requested-With", "XMLHttpRequest")).andReturn();
         assertEquals(200, restored.getResponse().getStatus(), restored.getResponse().getContentAsString());
-        session = loginAs("admin", "Admin@12345"); assertEquals(before, ((List<?>) bootstrap().get("customers")).size());
+        session = loginAs("admin", "88888888"); assertEquals(before, ((List<?>) bootstrap().get("customers")).size());
         customer();
         MvcResult invalid = mvc.perform(multipart("/api/system/restore").file(new MockMultipartFile("file", "bad.zip", "application/zip", "bad".getBytes())).param("confirmation", "RESTORE").session(session).header("X-Requested-With", "XMLHttpRequest")).andReturn();
         assertEquals(400, invalid.getResponse().getStatus());

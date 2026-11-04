@@ -5,7 +5,6 @@ import java.time.*;
 import java.util.*;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import static com.yixing.common.Values.*;
@@ -13,16 +12,17 @@ import static com.yixing.common.Values.*;
 @Component
 public class DemoData implements ApplicationRunner {
     private final Store store;
-    public DemoData(Store store) { this.store = store; }
+    private final AccountSeed seed;
+    @org.springframework.beans.factory.annotation.Value("${app.demo-history:false}")
+    private boolean history;
+    public DemoData(Store store, AccountSeed seed) { this.store = store; this.seed = seed; }
     @Override
     @Transactional
     public void run(ApplicationArguments arguments) {
         // 仅在没有账号的空库里生成课程演示数据，正常重启不会重复添加。
         // 下方账号密码用于本地演示，正式部署前应更换；客户和车辆信息均为虚构。
-        if (!store.list("sys_user").isEmpty()) return;
-        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
-        store.insert("sys_user", map("username", "admin", "password_hash", encoder.encode("Admin@12345"), "name", "林知行", "role", "ADMIN", "enabled", true));
-        store.insert("sys_user", map("username", "staff", "password_hash", encoder.encode("Staff@12345"), "name", "陈小满", "role", "ADMIN", "account_type", "STAFF", "enabled", true));
+        if (!store.list("sys_user").isEmpty() || !store.list("settings").isEmpty()) return;
+        seed.team();
         store.insert("settings", map("id", 1L, "reminder_days", 7, "reminder_km", 500, "company_name", "易行租车"));
         List<Map<String, Object>> branches = new ArrayList<>();
         for (String[] entry : List.of(new String[]{"静安城市店", "上海市静安区示范路 18 号", "021-00000001"}, new String[]{"虹桥枢纽店", "上海市闵行区示范路 66 号", "021-00000002"}, new String[]{"浦东机场店", "上海市浦东新区示范路 99 号", "021-00000003"})) branches.add(store.insert("branch", map("name", entry[0], "address", entry[1], "phone", entry[2])));
@@ -37,8 +37,16 @@ public class DemoData implements ApplicationRunner {
             String[] model = models[index]; long mileage = 8000 + index * 1730L;
             vehicles.add(store.insert("vehicle", map("plate", "沪A·" + (21001 + index), "brand", model[0], "model", model[1], "category", model[2], "color", model[3], "seats", model[2].equals("商务 MPV") ? 7 : 5, "purchase_date", LocalDate.now().minusMonths(18 + index).toString(), "license_no", "DEMO-VEHICLE-" + (index + 1), "mileage", mileage, "branch_id", branches.get(index % 3).get("id"), "pricing_id", rates.get(Integer.parseInt(model[4])).get("id"), "status", "AVAILABLE", "image", "", "next_service_date", LocalDate.now().plusDays(index % 5 == 0 ? 3 : 30 + index).toString(), "next_service_mileage", mileage + (index % 5 == 0 ? 300 : 5000))));
         }
-        List<Map<String, Object>> customers = new ArrayList<>(); String[] names = {"周予安", "许清禾", "沈亦舟", "顾南乔", "陆景明", "林初夏", "程远", "苏念", "测试限制客户"};
-        for (int index = 0; index < names.length; index++) customers.add(store.insert("customer", map("name", names[index], "identity_no", "DEMO-ID-" + String.format("%06d", index + 1), "phone", "1380000" + String.format("%04d", index + 1), "license_no", "DEMO-DL-" + (index + 1), "license_expiry", LocalDate.now().plusYears(3).toString(), "category", index % 3 == 0 ? "VIP" : "NORMAL", "restricted", index == 8, "notes", index == 8 ? "演示数据：限制租赁场景" : "虚构客户，仅用于课程演示")));
+        seed.customers();
+        // 只有隔离的回归测试显式启用历史订单夹具，普通空库保持五名客户、零订单。
+        if (history) {
+        for (int index = 5; index < 9; index++) {
+            var profile = store.insert("customer", map("name", "回归测试客户" + index, "identity_no", "TEST-SEED-" + index,
+                "phone", "1380000000" + index, "license_no", "TEST-DL-" + index, "license_expiry", LocalDate.now().plusYears(3).toString(),
+                "category", "NORMAL", "restricted", index == 8, "notes", "仅供隔离测试"));
+            seed.account("customer" + String.format("%02d", index + 1), text(profile, "name"), "CUSTOMER", profile.get("id"));
+        }
+        List<Map<String, Object>> customers = store.list("customer").stream().sorted(Comparator.comparingLong(row -> number(row, "id"))).toList();
         // 生成已结算、出租中和待取车订单，让工作台和报表有不同业务状态可展示。
         for (int index = 0; index < 24; index++) {
             Map<String, Object> vehicle = vehicles.get(index % vehicles.size()), rate = rates.get(Integer.parseInt(models[index % models.length][4]));
@@ -62,13 +70,14 @@ public class DemoData implements ApplicationRunner {
             LocalDateTime start = index == 2 ? LocalDateTime.now().plusMinutes(2) : LocalDateTime.now().plusDays(index - 1);
             seedOrder(vehicles.get(index), customers.get(index), rates.get(Integer.parseInt(models[index][4])), start, start.plusDays(2), "RESERVED", 40 + index);
         }
+        }
         Map<String, Object> repairVehicle = vehicles.get(7); store.update("vehicle", number(repairVehicle, "id"), map("status", "MAINTENANCE"));
         store.insert("maintenance_record", map("vehicle_id", repairVehicle.get("id"), "type", "SERVICE", "project", "常规保养 / 更换机油与滤芯", "assignee", "王师傅", "cost", 680, "status", "IN_PROGRESS", "started_at", LocalDateTime.now().minusHours(3).toString()));
         store.insert("maintenance_record", map("vehicle_id", vehicles.get(8).get("id"), "type", "SERVICE", "project", "轮胎检查及四轮定位", "assignee", "李师傅", "cost", 320, "status", "PENDING"));
         store.insert("maintenance_record", map("vehicle_id", vehicles.get(12).get("id"), "type", "SERVICE", "project", "常规保养", "assignee", "王师傅", "cost", 480, "status", "COMPLETED", "started_at", LocalDateTime.now().minusDays(4).toString(), "completed_at", LocalDateTime.now().minusDays(3).toString()));
         Map<String, Object> dispatched = vehicles.get(9); store.update("vehicle", number(dispatched, "id"), map("status", "DISPATCHING"));
         store.insert("dispatch_task", map("vehicle_id", dispatched.get("id"), "from_branch", dispatched.get("branch_id"), "to_branch", branches.get(1).get("id"), "assignee", "赵启明", "planned_start", LocalDateTime.now().minusMinutes(30).toString(), "planned_end", LocalDateTime.now().plusHours(2).toString(), "actual_start", LocalDateTime.now().minusMinutes(25).toString(), "status", "IN_PROGRESS", "notes", "门店运力调配"));
-        store.insert("operation_log", map("operator", "系统", "action", "初始化演示数据", "target", "车辆 / 客户 / 订单", "created_at", now()));
+        store.insert("operation_log", map("operator", "系统", "action", "初始化演示数据", "target", "车辆 / 5 个客户账号", "created_at", now()));
     }
     private Map<String, Object> seedOrder(Map<String, Object> vehicle, Map<String, Object> customer, Map<String, Object> rate, LocalDateTime start, LocalDateTime end, String status, int serial) {
         // 演示订单也保存价格快照，使其与正式创建订单的结算规则保持一致。

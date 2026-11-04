@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 
 // 每轮使用单独的测试库，不修改日常演示库中的账号。
-@SpringBootTest(properties = {"spring.datasource.url=${TEST_ACCOUNT_DATABASE_URL:jdbc:h2:mem:accounttest;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1}", "spring.main.banner-mode=off"})
+@SpringBootTest(properties = {"spring.datasource.url=${TEST_ACCOUNT_DATABASE_URL:jdbc:h2:mem:accounttest;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1}", "spring.main.banner-mode=off", "app.demo-history=true"})
 @AutoConfigureMockMvc
 class AccountLifecycleTest {
     @Autowired MockMvc mvc;
@@ -38,10 +38,14 @@ class AccountLifecycleTest {
     void rejects(MvcResult result, int status) throws Exception { assertEquals(status, result.getResponse().getStatus(), result.getResponse().getContentAsString()); }
     MockHttpSession login(String username, String password, String role) throws Exception {
         MvcResult result = send(post("/api/auth/login"), null, map("username", username, "password", password, "portal", role));
-        ok(result);
+        Map<String, Object> account = ok(result);
+        if (role.equals("CUSTOMER") && !flag(account, "security_configured")) {
+            ok(send(post("/api/auth/security"), (MockHttpSession) result.getRequest().getSession(),
+                map("password", password, "security_question", "birth_city", "security_answer", "测试城市")));
+        }
         return (MockHttpSession) result.getRequest().getSession();
     }
-    MockHttpSession admin() throws Exception { return login("admin", "Admin@12345", "ADMIN"); }
+    MockHttpSession admin() throws Exception { return login("admin", "88888888", "ADMIN"); }
     String suffix() { return UUID.randomUUID().toString().substring(0, 8); }
     Map<String, Object> input(String type) {
         String token = suffix();
@@ -50,8 +54,9 @@ class AccountLifecycleTest {
             "phone", "13800009999", "identity_no", "TEST-ID-" + token, "license_no", "TEST-LICENSE-" + token,
             "license_expiry", LocalDate.now().plusYears(3).toString());
     }
-    Map<String, Object> create(MockHttpSession admin, Map<String, Object> input) throws Exception { return ok(send(post("/api/system/users"), admin, input)); }
-    MvcResult remove(MockHttpSession session, long id) throws Exception { return send(delete("/api/system/users/" + id), session, map("confirmation", "DELETE")); }
+    String path(long id) { return ("CUSTOMER".equals(text(store.get("sys_user", id), "role")) ? "/api/customers/accounts/" : "/api/system/users/") + id; }
+    Map<String, Object> create(MockHttpSession admin, Map<String, Object> input) throws Exception { return ok(send(post("CUSTOMER".equals(text(input, "role")) ? "/api/customers/accounts" : "/api/system/users"), admin, input)); }
+    MvcResult remove(MockHttpSession session, long id) throws Exception { return send(delete(path(id)), session, map("confirmation", "DELETE")); }
     MvcResult close(MockHttpSession session, String password) throws Exception { return send(delete("/api/auth/account"), session, map("confirmation", "CLOSE", "password", password)); }
     MvcResult me(MockHttpSession session) throws Exception { return mvc.perform(get("/api/auth/me").session(session)).andReturn(); }
 
@@ -65,7 +70,7 @@ class AccountLifecycleTest {
             MockHttpSession oldSession = login(text(draft, "username"), PASSWORD, text(draft, "role"));
             Map<String, Object> edit = new LinkedHashMap<>(account);
             edit.put("username", "renamed_" + suffix()); edit.put("name", "修改后的姓名"); edit.put("password", "");
-            Map<String, Object> updated = ok(send(put("/api/system/users/" + id), manager, edit));
+            Map<String, Object> updated = ok(send(put(path(id)), manager, edit));
             assertEquals("修改后的姓名", updated.get("name")); ok(me(oldSession));
             if (type.equals("CUSTOMER")) assertEquals("修改后的姓名", store.get("customer", number(account, "customer_id")).get("name"));
             ok(remove(manager, id));
@@ -82,7 +87,7 @@ class AccountLifecycleTest {
         rejects(send(delete("/api/auth/account"), first, map("password", PASSWORD)), 400);
         rejects(close(first, "WrongPassword"), 400);
         ok(me(first));
-        rejects(close(manager, "Admin@12345"), 400);
+        rejects(close(manager, "88888888"), 400);
         ok(close(first, PASSWORD));
         rejects(me(second), 401);
         assertTrue(first.isInvalid());
@@ -105,14 +110,14 @@ class AccountLifecycleTest {
     }
     @Test void resetPasswordAndDisableInvalidateOldSessions() throws Exception {
         MockHttpSession manager = admin();
-        Map<String, Object> target = create(manager, input("CUSTOMER"));
+        Map<String, Object> target = create(manager, input("STAFF"));
         long id = number(target, "id");
-        MockHttpSession old = login(text(target, "username"), PASSWORD, "CUSTOMER");
+        MockHttpSession old = login(text(target, "username"), PASSWORD, "ADMIN");
         Map<String, Object> edit = new LinkedHashMap<>(target);
         edit.put("password", "Changed@12345");
         ok(send(put("/api/system/users/" + id), manager, edit));
         rejects(me(old), 401);
-        MockHttpSession fresh = login(text(target, "username"), "Changed@12345", "CUSTOMER");
+        MockHttpSession fresh = login(text(target, "username"), "Changed@12345", "ADMIN");
         edit.put("password", ""); edit.put("enabled", false);
         ok(send(put("/api/system/users/" + id), manager, edit));
         rejects(me(fresh), 401);
@@ -157,21 +162,21 @@ class AccountLifecycleTest {
         MockHttpSession manager = admin();
         Map<String, Object> draft = input("CUSTOMER");
         draft.put("password", "short");
-        rejects(send(post("/api/system/users"), manager, draft), 400);
+        rejects(send(post("/api/customers/accounts"), manager, draft), 400);
         assertTrue(store.list("customer").stream().noneMatch(row -> draft.get("identity_no").equals(row.get("identity_no"))));
         draft.put("password", PASSWORD);
         Map<String, Object> account = create(manager, draft), duplicate = input("CUSTOMER");
         duplicate.put("customer_id", account.get("customer_id"));
-        rejects(send(post("/api/system/users"), manager, duplicate), 400);
+        rejects(send(post("/api/customers/accounts"), manager, duplicate), 400);
         Map<String, Object> edit = new LinkedHashMap<>(account);
         edit.put("customer_id", 1);
-        rejects(send(put("/api/system/users/" + account.get("id")), manager, edit), 400);
+        rejects(send(put(path(number(account, "id"))), manager, edit), 400);
         edit.put("customer_id", account.get("customer_id")); edit.put("role", "ADMIN"); edit.put("account_type", "ADMIN");
-        rejects(send(put("/api/system/users/" + account.get("id")), manager, edit), 400);
+        rejects(send(put(path(number(account, "id"))), manager, edit), 400);
         ok(remove(manager, number(account, "id")));
     }
     @Test void staffCannotRemoveDisableOrDemoteLastTrueAdministrator() throws Exception {
-        MockHttpSession manager = admin(), staff = login("staff", "Staff@12345", "ADMIN");
+        MockHttpSession manager = admin(), staff = login("staff", "88888888", "ADMIN");
         Map<String, Object> original = ok(me(manager)), edit = new LinkedHashMap<>(original);
         long id = number(original, "id");
         rejects(remove(staff, id), 400);

@@ -20,7 +20,11 @@ public class PortalController {
     private final RentalService rentals;
     private final AccountService accounts;
     public PortalController(Store store, Access access, RentalService rentals, AccountService accounts) { this.store = store; this.access = access; this.rentals = rentals; this.accounts = accounts; }
-    private long lockedCustomerId() { return number(accounts.lockCustomerAccount(number(access.user(), "id")), "customer_id"); }
+    private long lockedCustomerId() {
+        var user = accounts.lockCustomerAccount(number(access.user(), "id"));
+        require(com.yixing.auth.SecurityQuestions.configured(user), "请先设置密保问题");
+        return number(user, "customer_id");
+    }
     private long customerId() {
         // 从登录身份取得客户编号，不接受浏览器自行指定，防止冒用其他客户。
         if (!"CUSTOMER".equals(text(access.user(), "role")) || access.user().get("customer_id") == null) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "仅已关联档案的客户账号可访问");

@@ -8,7 +8,7 @@ import static com.yixing.common.BusinessException.require;
 // 业务层通过这里读写数据，不直接拼 SQL；表名必须在允许列表中。
 public class Store {
     private final DataMapper mapper;
-    private static final Set<String> TABLES = Set.of("sys_user", "branch", "vehicle", "customer", "pricing_rule", "rental_order", "payment_record", "dispatch_task", "maintenance_record", "settings", "operation_log");
+    private static final Set<String> TABLES = Set.of("sys_user", "password_reset_ticket", "branch", "vehicle", "customer", "pricing_rule", "rental_order", "payment_record", "dispatch_task", "maintenance_record", "settings", "operation_log");
     public Store(DataMapper mapper) { this.mapper = mapper; }
     private void check(String table) { require(TABLES.contains(table), "不支持的数据类型"); }
     public List<Map<String, Object>> list(String table) { check(table); return mapper.list(table); }

@@ -12,14 +12,20 @@ import static com.yixing.common.Values.*;
 @Service
 public class AccountService {
     private final Store store;
-    public AccountService(Store store) { this.store = store; }
+    private final Access access;
+    public AccountService(Store store, Access access) { this.store = store; this.access = access; }
     // 账号新增、编辑、删除和客户写操作共用这把事务锁，避免注销和下单同时通过检查。
     public void lockAccounts() { store.lock("settings", 1); }
     public Map<String, Object> lockCustomerAccount(long id) {
         lockAccounts();
         Map<String, Object> user = store.lock("sys_user", id);
         require("CUSTOMER".equals(text(user, "role")) && flag(user, "enabled") && user.get("customer_id") != null, "客户登录状态已变化，请重新登录");
+        currentSession(user);
         return user;
+    }
+    public void currentSession(Map<String, Object> user) {
+        // 请求可能在重置前通过过滤器、重置后才拿到锁，此时也必须拒绝旧会话。
+        require(text(user, "password_hash").equals(text(access.user(), "password_hash")), "密码已变更，请重新登录");
     }
     public boolean administrator(Map<String, Object> user) {
         return "ADMIN".equals(text(user, "role")) && !"STAFF".equals(text(user, "account_type")) && flag(user, "enabled");
@@ -66,6 +72,8 @@ public class AccountService {
         username(input, null);
         String password = required(input, "password", 64);
         require(password.length() >= 8, "密码至少 8 位");
+        String question = SecurityQuestions.question(input);
+        String answer = SecurityQuestions.answer(input, "security_answer");
         String identity = required(input, "identity_no", 30), phone = required(input, "phone", 30);
         require(identity.matches("[A-Za-z0-9-]{6,30}"), "证件号须为 6 至 30 位字母、数字或连字符");
         require(phone.matches("[0-9+ -]{7,20}"), "联系方式格式不正确");
@@ -73,7 +81,9 @@ public class AccountService {
         require(store.list("customer").stream().noneMatch(customer -> identity.equalsIgnoreCase(text(customer, "identity_no"))), "该证件已建档，请联系管理员开通或找回客户账号");
         // 客户档案与登录账号一起创建，任何一步失败都回滚，避免只建档却无法登录。
         Map<String, Object> customer = store.insert("customer", map("name", required(input, "name", 60), "identity_no", identity, "phone", phone, "license_no", required(input, "license_no", 80), "license_expiry", date(input, "license_expiry").toString(), "category", "NORMAL", "restricted", false, "notes", ""));
-        Map<String, Object> user = store.insert("sys_user", map("username", text(input, "username"), "password_hash", new BCryptPasswordEncoder().encode(password), "name", customer.get("name"), "role", "CUSTOMER", "account_type", "CUSTOMER", "customer_id", customer.get("id"), "enabled", true));
+        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
+        Map<String, Object> user = store.insert("sys_user", map("username", text(input, "username"), "password_hash", encoder.encode(password), "name", customer.get("name"), "role", "CUSTOMER", "account_type", "CUSTOMER", "customer_id", customer.get("id"), "enabled", true,
+            "security_question", question, "security_answer_hash", encoder.encode(answer)));
         store.insert("operation_log", map("operator", "客户自主注册", "action", "开通客户账号", "target", text(user, "username"), "created_at", now()));
         return AuthController.publicUser(user);
     }

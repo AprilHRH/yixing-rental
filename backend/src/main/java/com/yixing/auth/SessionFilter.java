@@ -18,7 +18,9 @@ public class SessionFilter extends OncePerRequestFilter {
     public static long epoch() { return EPOCH.get(); }
     public static void invalidateSessions() { EPOCH.incrementAndGet(); }
     private final Store store;
-    public SessionFilter(Store store) { this.store = store; }
+    private final RecoveryThrottle throttle;
+    private static final java.util.Set<String> RECOVERY = java.util.Set.of("/api/auth/recovery/question", "/api/auth/recovery/password", "/api/auth/recovery/tickets");
+    public SessionFilter(Store store, RecoveryThrottle throttle) { this.store = store; this.throttle = throttle; }
     private void fail(HttpServletResponse response, int status, String message) throws IOException {
         response.setStatus(status); response.setContentType("application/json;charset=UTF-8");
         response.getWriter().write("{\"message\":\"" + message + "\"}");
@@ -35,6 +37,10 @@ public class SessionFilter extends OncePerRequestFilter {
         if (origin != null && !java.util.Arrays.asList(allowedOrigins.split(",")).contains(origin)) {
             fail(response, 403, "不允许的请求来源"); return;
         }
+        if (RECOVERY.contains(path)) {
+            if (!throttle.allow(request.getRemoteAddr())) { fail(response, 429, "请求过于频繁，请稍后再试"); return; }
+            chain.doFilter(request, response); return;
+        }
         if (path.equals("/api/auth/login") || path.equals("/api/auth/register")) { chain.doFilter(request, response); return; }
         HttpSession session = request.getSession(false);
         if (session == null || session.getAttribute("userId") == null || !Long.valueOf(epoch()).equals(session.getAttribute("epoch"))) { fail(response, 401, "请先登录"); return; }
@@ -46,11 +52,15 @@ public class SessionFilter extends OncePerRequestFilter {
         if (!text(user, "password_hash").equals(session.getAttribute("passwordHash"))) { session.invalidate(); fail(response, 401, "密码已变更，请重新登录"); return; }
         request.setAttribute("user", user);
         // 权限在服务器上判断。即使客户手动输入管理端接口地址，也不能读取管理数据。
-        if ("CUSTOMER".equals(text(user, "role")) && !path.startsWith("/api/portal/") && !java.util.Set.of("/api/auth/me", "/api/auth/logout", "/api/auth/password", "/api/auth/account").contains(path)) {
+        if ("CUSTOMER".equals(text(user, "role")) && !path.startsWith("/api/portal/") && !java.util.Set.of("/api/auth/me", "/api/auth/logout", "/api/auth/password", "/api/auth/account", "/api/auth/security").contains(path)) {
             fail(response, 403, "客户账号不能访问管理端数据"); return;
         }
         if ((path.startsWith("/api/system") || path.startsWith("/api/reports")) && !"ADMIN".equals(text(user, "role"))) {
             fail(response, 403, "该功能仅对管理员开放"); return;
+        }
+        if ("CUSTOMER".equals(text(user, "role")) && !SecurityQuestions.configured(user)
+            && path.startsWith("/api/portal/") && !"GET".equals(request.getMethod())) {
+            fail(response, 403, "请先设置密保问题后再办理业务"); return;
         }
         chain.doFilter(request, response);
     }

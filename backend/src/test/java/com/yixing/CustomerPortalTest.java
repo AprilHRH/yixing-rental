@@ -29,7 +29,7 @@ class CustomerPortalTest {
     MockHttpSession login(String username, String password, String portal) throws Exception {
         MvcResult result = postJson("/api/auth/login", null, map("username", username, "password", password, "portal", portal)); ok(result); return (MockHttpSession) result.getRequest().getSession();
     }
-    Map<String, Object> registration() { String suffix = UUID.randomUUID().toString().substring(0, 8); return map("username", "client_" + suffix, "password", "Client@12345", "name", "自动化客户", "phone", "13800009999", "identity_no", "TEST-ID-" + suffix, "license_no", "TEST-LICENSE-" + suffix, "license_expiry", LocalDate.now().plusYears(3).toString(), "role", "CUSTOMER"); }
+    Map<String, Object> registration() { String suffix = UUID.randomUUID().toString().substring(0, 8); return map("username", "client_" + suffix, "password", "Client@12345", "name", "自动化客户", "phone", "13800009999", "identity_no", "TEST-ID-" + suffix, "license_no", "TEST-LICENSE-" + suffix, "license_expiry", LocalDate.now().plusYears(3).toString(), "role", "CUSTOMER", "security_question", "birth_city", "security_answer", "测试城市"); }
     Map<String, Object> data(MockHttpSession session, String path) throws Exception { return ok(mvc.perform(get(path).session(session)).andReturn()); }
     @Test void registrationCannotEscalateOrClaimExistingCustomer() throws Exception {
         Map<String, Object> input = registration(); input.put("role", "ADMIN");
@@ -56,7 +56,7 @@ class CustomerPortalTest {
         Map<String, Object> firstInput = registration(), secondInput = registration();
         Map<String, Object> first = ok(postJson("/api/auth/register", null, firstInput)); ok(postJson("/api/auth/register", null, secondInput));
         MockHttpSession firstSession = login(text(firstInput, "username"), "Client@12345", "CUSTOMER"), secondSession = login(text(secondInput, "username"), "Client@12345", "CUSTOMER");
-        MockHttpSession admin = login("admin", "Admin@12345", "ADMIN");
+        MockHttpSession admin = login("admin", "88888888", "ADMIN");
         Map<String, Object> car = ok(postJson("/api/vehicles", admin, map("plate", "沪P" + UUID.randomUUID().toString().substring(0, 6).toUpperCase(), "brand", "测试", "model", "测试车辆", "category", "经济轿车", "color", "白", "seats", 5, "purchase_date", LocalDate.now().minusDays(1).toString(), "license_no", "TEST", "mileage", 0, "branch_id", 1, "pricing_id", 1, "image", "", "next_service_mileage", 5000)));
         Map<String, Object> order = ok(postJson("/api/portal/orders", firstSession, map("vehicle_id", car.get("id"), "customer_id", 1, "pickup_branch", 2, "return_branch", 1, "planned_start", LocalDateTime.now().plusDays(3).toString(), "planned_end", LocalDateTime.now().plusDays(5).toString(), "expected_mileage", 0, "billing_mode", "DAILY")));
         assertEquals(first.get("customer_id"), order.get("customer_id")); assertEquals(1, number(order, "pickup_branch"));
@@ -71,16 +71,17 @@ class CustomerPortalTest {
         assertTrue(((List<?>) data(secondSession, "/api/portal/bootstrap").get("payments")).isEmpty());
     }
     @Test void staffIsManagerAndCustomerAccountCanBeProvisioned() throws Exception {
-        MockHttpSession staff = login("staff", "Staff@12345", "ADMIN");
+        MockHttpSession staff = login("staff", "88888888", "ADMIN");
         assertEquals("ADMIN", data(staff, "/api/auth/me").get("role")); data(staff, "/api/system");
         Map<String, Object> person = ok(postJson("/api/customers", staff, map("name", "后台新增客户", "identity_no", "TEST-" + UUID.randomUUID().toString().substring(0, 8), "phone", "13800007777", "license_no", "TEST", "license_expiry", LocalDate.now().plusYears(2).toString(), "category", "NORMAL", "restricted", false)));
-        String username = "added_" + UUID.randomUUID().toString().substring(0, 8);
-        Map<String, Object> account = ok(postJson("/api/system/users", staff, map("username", username, "name", "后台新增客户", "role", "CUSTOMER", "account_type", "CUSTOMER", "customer_id", person.get("id"), "password", "Client@12345", "enabled", true)));
-        assertEquals(person.get("id"), account.get("customer_id")); login(username, "Client@12345", "CUSTOMER");
-        assertEquals(400, postJson("/api/system/users", staff, map("username", username + "x", "name", "重复绑定", "role", "CUSTOMER", "customer_id", person.get("id"), "password", "Client@12345", "enabled", true)).getResponse().getStatus());
+        MvcResult accounts = mvc.perform(get("/api/customers/accounts").session(staff)).andReturn();
+        List<Map<String, Object>> users = json.readValue(accounts.getResponse().getContentAsByteArray(), List.class);
+        Map<String, Object> account = users.stream().filter(user -> number(user, "customer_id") == number(person, "id")).findFirst().orElseThrow();
+        assertEquals(person.get("id"), account.get("customer_id")); login(text(account, "username"), "88888888", "CUSTOMER");
+        assertEquals(400, postJson("/api/customers/accounts", staff, map("username", text(account, "username") + "x", "name", "重复绑定", "role", "CUSTOMER", "account_type", "CUSTOMER", "customer_id", person.get("id"), "password", "Client@12345", "enabled", true)).getResponse().getStatus());
     }
     @Test void reminderRemainsPendingButDisappearsOnStart() throws Exception {
-        MockHttpSession admin = login("admin", "Admin@12345", "ADMIN");
+        MockHttpSession admin = login("admin", "88888888", "ADMIN");
         Map<String, Object> car = ok(postJson("/api/vehicles", admin, map("plate", "沪M" + UUID.randomUUID().toString().substring(0, 6).toUpperCase(), "brand", "测试", "model", "测试车辆", "category", "经济轿车", "color", "白", "seats", 5, "purchase_date", LocalDate.now().minusDays(1).toString(), "license_no", "TEST", "mileage", 0, "branch_id", 1, "pricing_id", 1, "image", "", "next_service_date", LocalDate.now().plusDays(1).toString(), "next_service_mileage", 100)));
         long carId = number(car, "id");
         Map<String, Object> task = ok(postJson("/api/maintenance", admin, map("vehicle_id", carId, "type", "SERVICE", "project", "保养测试", "assignee", "测试人员", "cost", 100)));

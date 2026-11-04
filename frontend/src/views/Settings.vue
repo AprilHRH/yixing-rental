@@ -7,7 +7,7 @@ import { state, refresh, labels, dateText } from '../store'
 import FormDialog from '../components/FormDialog.vue'
 const tab = ref('users'), data = reactive({ users: [], logs: [], settings: {} }), settings = reactive({}), open = ref(false), kind = ref('user'), initial = ref({}), editId = ref(null), busy = ref(false), restoreFile = ref(null)
 const search = ref(''), accountType = ref(''), enabled = ref('')
-const types = [{ label: '管理员', value: 'ADMIN' }, { label: '业务人员', value: 'STAFF' }, { label: '客户', value: 'CUSTOMER' }]
+const types = [{ label: '管理员', value: 'ADMIN' }, { label: '业务人员', value: 'STAFF' }]
 const users = computed(() => data.users.filter(user => {
   const keyword = search.value.trim().toLowerCase()
   return (!keyword || `${user.name} ${user.username}`.toLowerCase().includes(keyword))
@@ -20,19 +20,14 @@ const fields = computed(() => kind.value === 'user' ? [
   { key: 'username', label: '登录账号', tip: '3 至 30 位字母、数字或下划线' },
   { key: 'name', label: '姓名' },
   { key: 'password', label: editId.value ? '重置密码（留空不修改）' : '初始密码', type: 'password', required: !editId.value, tip: '至少 8 位，重置后原登录会话失效' },
-  { key: 'account_type', label: '账号类型', type: 'select', options: types, disabled: !!editId.value && initial.value.account_type === 'CUSTOMER' },
-  { key: 'new_customer', label: '同时新建客户档案', type: 'switch', required: false, show: form => !editId.value && form.account_type === 'CUSTOMER' },
-  { key: 'customer_id', label: '关联客户档案', type: 'select', wide: true, disabled: !!editId.value && initial.value.account_type === 'CUSTOMER', show: form => form.account_type === 'CUSTOMER' && (editId.value || !form.new_customer), options: state.customers.filter(customer => !data.users.some(user => user.customer_id === customer.id && user.id !== editId.value)).map(customer => ({ label: customer.name + ' · ' + customer.phone, value: customer.id })), tip: '一个档案仅关联一个账号，历史订单仍归属于原客户档案' },
-  ...[{ key: 'phone', label: '手机号' }, { key: 'identity_no', label: '证件号' }, { key: 'license_no', label: '驾驶证号' }, { key: 'license_expiry', label: '驾驶证有效期至', type: 'date' }].map(field => ({ ...field, show: form => !editId.value && form.account_type === 'CUSTOMER' && form.new_customer })),
+  { key: 'account_type', label: '账号类型', type: 'select', options: types },
   { key: 'enabled', label: '账号启用', type: 'switch', required: false }
 ] : [{ key: 'name', label: '门店名称', wide: true }, { key: 'address', label: '门店地址', wide: true }, { key: 'phone', label: '联系电话', wide: true }])
-function create(type, row) { kind.value = type; editId.value = row?.id || null; initial.value = row ? { ...row, password: '' } : type === 'user' ? { enabled: true, account_type: 'STAFF', new_customer: true } : {}; open.value = true }
+function create(type, row) { kind.value = type; editId.value = row?.id || null; initial.value = row ? { ...row, password: '' } : type === 'user' ? { enabled: true, account_type: 'STAFF', password: '88888888' } : {}; open.value = true }
 // 管理员和业务人员共用管理权限，客户使用独立权限；保存后刷新设置与全局业务数据。
 async function save(input) {
   if (kind.value === 'user') {
-    input.role = input.account_type === 'CUSTOMER' ? 'CUSTOMER' : 'ADMIN'
-    if (!editId.value && input.role === 'CUSTOMER' && input.new_customer) delete input.customer_id
-    delete input.new_customer
+    input.role = 'ADMIN'
   }
   busy.value = true
   try { const resource = kind.value === 'user' ? 'users' : 'branches'; await api[editId.value ? 'put' : 'post'](`/system/${resource}` + (editId.value ? '/' + editId.value : ''), input); open.value = false; await Promise.all([load(), refresh()]); ElMessage.success('设置已保存') } catch {} finally { busy.value = false }
@@ -87,7 +82,7 @@ async function restore(event) {
             </el-tooltip>
           </template></el-table-column>
         </el-table>
-        <div class="permission-note"><h4>权限说明</h4><p><strong>管理员：</strong>全部业务模块、经营报表、账号、门店、计费参数与数据备份恢复。</p><p><strong>业务人员：</strong>与管理员共用完整管理权限，账号类型用于区分人员身份。</p><p><strong>客户：</strong>公开注册或由管理员开通；仅可访问本人的资料、订单及选车预约。无未完成订单时可自行注销账号。</p></div>
+        <div class="permission-note"><h4>权限说明</h4><p><strong>管理员：</strong>全部业务模块、经营报表、账号、门店、计费参数与数据备份恢复。</p><p><strong>业务人员：</strong>与管理员共用完整管理权限，账号类型用于区分人员身份。</p></div>
       </el-tab-pane>
       <el-tab-pane label="门店管理" name="branches">
         <div class="settings-section-heading"><div><h3>运营门店</h3><p>车辆所属门店通过调度或实际归还更新。</p></div><el-button type="primary" :icon="Plus" @click="create('branch')">新增门店</el-button></div>

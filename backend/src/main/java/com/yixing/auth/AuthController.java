@@ -14,11 +14,13 @@ public class AuthController {
     private final Store store;
     private final Access access;
     private final AccountService accounts;
+    private final RecoveryService recovery;
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
-    public AuthController(Store store, Access access, AccountService accounts) { this.store = store; this.access = access; this.accounts = accounts; }
+    public AuthController(Store store, Access access, AccountService accounts, RecoveryService recovery) { this.store = store; this.access = access; this.accounts = accounts; this.recovery = recovery; }
     public static Map<String, Object> publicUser(Map<String, Object> user) {
         // 返回登录所需信息，不返回密码哈希，避免把整条账号记录暴露给浏览器。
-        return map("id", user.get("id"), "name", user.get("name"), "username", user.get("username"), "role", user.get("role"), "enabled", user.get("enabled"), "account_type", user.get("account_type"), "customer_id", user.get("customer_id"));
+        return map("id", user.get("id"), "name", user.get("name"), "username", user.get("username"), "role", user.get("role"), "enabled", user.get("enabled"), "account_type", user.get("account_type"), "customer_id", user.get("customer_id"),
+            "security_configured", SecurityQuestions.configured(user), "security_question", text(user, "security_question"));
     }
     @PostMapping("/login")
     public Map<String, Object> login(@RequestBody Map<String, Object> data, HttpServletRequest request) {
@@ -48,12 +50,7 @@ public class AuthController {
     @PostMapping("/password")
     public Map<String, Object> password(@RequestBody Map<String, Object> data, HttpServletRequest request) {
         // 改密需验证原密码，保存新哈希后注销当前会话，要求重新登录。
-        Map<String, Object> user = access.user();
-        require(encoder.matches(text(data, "old_password"), text(user, "password_hash")), "原密码不正确");
-        String password = required(data, "new_password", 64);
-        require(password.length() >= 8, "新密码至少 8 位");
-        store.update("sys_user", number(user, "id"), map("password_hash", encoder.encode(password)));
-        access.log("修改密码", text(user, "username"));
+        recovery.password(number(access.user(), "id"), data);
         request.getSession().invalidate();
         return map("success", true);
     }

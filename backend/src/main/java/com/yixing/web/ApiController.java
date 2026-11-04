@@ -12,6 +12,7 @@ import java.time.LocalDate;
 import java.util.*;
 import org.springframework.web.bind.annotation.*;
 import static com.yixing.common.Values.*;
+import static com.yixing.common.BusinessException.require;
 
 @RestController
 @RequestMapping("/api")
@@ -33,8 +34,21 @@ public class ApiController {
     @PostMapping("/vehicles") public Map<String, Object> vehicle(@RequestBody Map<String, Object> input) { return vehicles.save(null, input); }
     @PutMapping("/vehicles/{id}") public Map<String, Object> vehicle(@PathVariable long id, @RequestBody Map<String, Object> input) { return vehicles.save(id, input); }
     @PostMapping("/vehicles/{id}/toggle") public Map<String, Object> toggle(@PathVariable long id) { return vehicles.toggle(id); }
-    @PostMapping("/customers") public Map<String, Object> customer(@RequestBody Map<String, Object> input) { return customers.save(null, input); }
+    @PostMapping("/customers") public Map<String, Object> customer(@RequestBody Map<String, Object> input) { return customers.create(input); }
     @PutMapping("/customers/{id}") public Map<String, Object> customer(@PathVariable long id, @RequestBody Map<String, Object> input) { return customers.save(id, input); }
+    @GetMapping("/customers/accounts") public List<Map<String, Object>> customerAccounts() { return customers.accounts(); }
+    @PostMapping("/customers/accounts") public Map<String, Object> customerAccount(@RequestBody Map<String, Object> input) {
+        require("CUSTOMER".equals(text(input, "role")) && "CUSTOMER".equals(text(input, "account_type")), "此处仅管理客户账号");
+        return system.user(null, input);
+    }
+    @PutMapping("/customers/accounts/{id}") public Map<String, Object> customerAccount(@PathVariable long id, @RequestBody Map<String, Object> input) {
+        require("CUSTOMER".equals(text(store.get("sys_user", id), "role")) && "CUSTOMER".equals(text(input, "role")) && "CUSTOMER".equals(text(input, "account_type")), "此处仅管理客户账号");
+        return system.user(id, input);
+    }
+    @DeleteMapping("/customers/accounts/{id}") public Map<String, Object> deleteCustomerAccount(@PathVariable long id, @RequestBody Map<String, Object> input) {
+        require("CUSTOMER".equals(text(store.get("sys_user", id), "role")), "此处仅管理客户账号");
+        return system.deleteUser(id, input);
+    }
     @PostMapping("/pricing/quote") public Map<String, Object> quote(@RequestBody Map<String, Object> input) { return rentals.quote(input); }
     @PostMapping("/orders") public Map<String, Object> order(@RequestBody Map<String, Object> input) { return rentals.save(null, input); }
     @PutMapping("/orders/{id}") public Map<String, Object> order(@PathVariable long id, @RequestBody Map<String, Object> input) { return rentals.save(id, input); }
@@ -47,9 +61,18 @@ public class ApiController {
     @PostMapping("/maintenance/{id}/{action}") public Map<String, Object> maintenance(@PathVariable long id, @PathVariable String action, @RequestBody Map<String, Object> input) { return maintenance.action(id, action, input); }
     @GetMapping("/reports") public Map<String, Object> reports(@RequestParam String from, @RequestParam String to) { return reports.report(from, to); }
     @GetMapping("/system") public Map<String, Object> system() { return system.overview(); }
-    @PostMapping("/system/users") public Map<String, Object> user(@RequestBody Map<String, Object> input) { return system.user(null, input); }
-    @PutMapping("/system/users/{id}") public Map<String, Object> user(@PathVariable long id, @RequestBody Map<String, Object> input) { return system.user(id, input); }
-    @DeleteMapping("/system/users/{id}") public Map<String, Object> deleteUser(@PathVariable long id, @RequestBody Map<String, Object> input) { return system.deleteUser(id, input); }
+    private void team(Map<String, Object> input) {
+        require("ADMIN".equals(text(input, "role")) && Set.of("ADMIN", "STAFF").contains(text(input, "account_type")), "系统管理仅管理管理员和业务人员，客户账号请到客户管理");
+    }
+    @PostMapping("/system/users") public Map<String, Object> user(@RequestBody Map<String, Object> input) { team(input); return system.user(null, input); }
+    @PutMapping("/system/users/{id}") public Map<String, Object> user(@PathVariable long id, @RequestBody Map<String, Object> input) {
+        team(input); require(!"CUSTOMER".equals(text(store.get("sys_user", id), "role")), "客户账号请到客户管理");
+        return system.user(id, input);
+    }
+    @DeleteMapping("/system/users/{id}") public Map<String, Object> deleteUser(@PathVariable long id, @RequestBody Map<String, Object> input) {
+        require(!"CUSTOMER".equals(text(store.get("sys_user", id), "role")), "客户账号请到客户管理");
+        return system.deleteUser(id, input);
+    }
     @PutMapping("/system/pricing/{id}") public Map<String, Object> pricing(@PathVariable long id, @RequestBody Map<String, Object> input) { return system.pricing(id, input); }
     @PostMapping("/system/branches") public Map<String, Object> branch(@RequestBody Map<String, Object> input) { return system.branch(null, input); }
     @PutMapping("/system/branches/{id}") public Map<String, Object> branch(@PathVariable long id, @RequestBody Map<String, Object> input) { return system.branch(id, input); }

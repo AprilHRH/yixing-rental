@@ -14,7 +14,9 @@ from account_acceptance import verify_accounts
 
 
 ROOT = Path(__file__).resolve().parents[1]
-BASE = 'http://127.0.0.1:5174'
+FRONTEND_PORT = int(os.environ.get('BROWSER_FRONTEND_PORT', '15174'))
+BACKEND_PORT = int(os.environ.get('BROWSER_BACKEND_PORT', '18081'))
+BASE = f'http://127.0.0.1:{FRONTEND_PORT}'
 ARTIFACTS = Path(os.environ.get('BROWSER_ARTIFACTS', str(ROOT / 'data/test-artifacts/browser')))
 
 
@@ -61,10 +63,10 @@ def main():
             try:
                 flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
                 database_url = os.environ.get('BROWSER_DATABASE_URL', 'jdbc:h2:mem:browser;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1')
-                children.append(subprocess.Popen([java, '-jar', str(ROOT / 'backend/target/rental-system-1.0.0.jar'), '--server.port=8081', '--spring.datasource.url=' + database_url, '--app.allowed-origins=' + BASE], cwd=directory, stdin=subprocess.DEVNULL, stdout=backend_log, stderr=subprocess.STDOUT, creationflags=flags))
-                environment = {**os.environ, 'FRONTEND_PORT': '5174', 'API_TARGET': 'http://127.0.0.1:8081'}
+                children.append(subprocess.Popen([java, '-jar', str(ROOT / 'backend/target/rental-system-1.0.0.jar'), f'--server.port={BACKEND_PORT}', '--spring.datasource.url=' + database_url, '--app.allowed-origins=' + BASE, '--app.demo-history=true'], cwd=directory, stdin=subprocess.DEVNULL, stdout=backend_log, stderr=subprocess.STDOUT, creationflags=flags))
+                environment = {**os.environ, 'FRONTEND_PORT': str(FRONTEND_PORT), 'API_TARGET': f'http://127.0.0.1:{BACKEND_PORT}'}
                 children.append(subprocess.Popen([node, str(ROOT / 'frontend/node_modules/vite/bin/vite.js')], cwd=ROOT / 'frontend', env=environment, stdin=subprocess.DEVNULL, stdout=frontend_log, stderr=subprocess.STDOUT, creationflags=flags))
-                wait_port(8081, children[0]); wait_port(5174, children[1])
+                wait_port(BACKEND_PORT, children[0]); wait_port(FRONTEND_PORT, children[1])
                 with sync_playwright() as playwright:
                     launch = {'headless': True, 'args': ['--disable-gpu']}
                     if browser_path:
@@ -91,13 +93,13 @@ def main():
                     visit(page, '/customers', '客户管理')
                     page.get_by_role('button', name='新增客户').click()
                     dialog = page.locator('.el-dialog:visible')
-                    for label, value in [('客户姓名', '浏览器验收客户'), ('联系电话', '13800008888'), ('身份证 / 证件号', 'DEMO-E2E-CUSTOMER'), ('驾驶证编号', 'DEMO-E2E-DRIVER')]:
+                    for label, value in [('客户姓名', '浏览器验收客户'), ('联系电话', '13800008888'), ('身份证 / 证件号', 'DEMO-E2E-CUSTOMER'), ('驾驶证编号', 'DEMO-E2E-DRIVER'), ('客户登录账号', 'browser_created_customer')]:
                         dialog.get_by_label(label, exact=True).fill(value)
                     date_input = dialog.get_by_label('驾驶证有效期', exact=True)
                     date_input.fill('2030-12-31'); date_input.press('Enter')
                     dialog.get_by_role('button', name='确认保存').click()
                     expect(dialog).not_to_be_visible()
-                    page.locator('input[placeholder="搜索姓名、联系方式"]').fill('浏览器验收客户')
+                    page.locator('input[placeholder="搜索姓名、联系方式、账号"]').fill('浏览器验收客户')
                     expect(page.get_by_role('cell', name='浏览器验收客户', exact=False)).to_be_visible()
                     results.append('客户登记及真实数据库查询')
                     visit(page, '/vehicles', '车辆信息')

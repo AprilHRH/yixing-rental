@@ -23,10 +23,10 @@ import static com.yixing.common.Values.*;
 @Service
 public class SystemService {
     private final Store store; private final Access access; private final JdbcTemplate jdbc; private final ObjectMapper json; private final TransactionTemplate transactions; private final AccountService accounts; private final CustomerService customers;
-    private static final List<String> TABLES = List.of("sys_user", "branch", "pricing_rule", "vehicle", "customer", "rental_order", "payment_record", "dispatch_task", "maintenance_record", "settings", "operation_log");
+    private static final List<String> TABLES = List.of("sys_user", "branch", "pricing_rule", "vehicle", "customer", "rental_order", "payment_record", "dispatch_task", "maintenance_record", "settings", "operation_log", "password_reset_ticket");
     public SystemService(Store store, Access access, JdbcTemplate jdbc, ObjectMapper json, org.springframework.transaction.PlatformTransactionManager manager, AccountService accounts, CustomerService customers) { this.store = store; this.access = access; this.jdbc = jdbc; this.json = json; this.transactions = new TransactionTemplate(manager); this.accounts = accounts; this.customers = customers; }
     public Map<String, Object> overview() {
-        return map("users", store.list("sys_user").stream().map(AuthController::publicUser).toList(), "settings", store.get("settings", 1), "logs", store.list("operation_log").stream().limit(300).toList());
+        return map("users", store.list("sys_user").stream().filter(user -> !"CUSTOMER".equals(text(user, "role"))).map(AuthController::publicUser).toList(), "settings", store.get("settings", 1), "logs", store.list("operation_log").stream().limit(300).toList());
     }
     @Transactional
     public Map<String, Object> user(Long id, Map<String, Object> input) {
@@ -43,6 +43,7 @@ public class SystemService {
         require(Set.of("ADMIN", "STAFF", "CUSTOMER").contains(accountType) && (!"ADMIN".equals(role) || !"CUSTOMER".equals(accountType)), "账号类型不正确");
         data.put("account_type", accountType);
         if (existing != null) {
+            require(!"CUSTOMER".equals(text(existing, "role")) || text(input, "password").isBlank(), "客户忘记密码请使用密保或密码重置工单");
             accounts.keepAdministrator(existing, data);
             // 客户账号保持原档案关联，避免将历史订单转交给另一个登录身份。
             if (existing.get("customer_id") != null) require("CUSTOMER".equals(role) && number(input, "customer_id") == number(existing, "customer_id"), "客户账号不可更换身份或客户档案");
@@ -136,6 +137,8 @@ public class SystemService {
         require("yixing-backup-v1".equals(snapshot.get("format")), "备份格式不正确");
         Map<String, List<Map<String, Object>>> restored = new LinkedHashMap<>();
         for (String table : TABLES) {
+            // 旧版本备份没有重置工单表，按空表导入；其余必需表仍严格校验。
+            if (table.equals("password_reset_ticket") && !snapshot.containsKey(table)) snapshot.put(table, List.of());
             Object rows = snapshot.get(table); require(rows instanceof List<?> && ((List<?>) rows).size() <= 10000, "备份表不完整或数据量超限");
             List<Map<String, Object>> records = json.convertValue(rows, new TypeReference<>() {});
             // 根据实际数据库字段检查备份，未知字段不能直接写入 SQL。

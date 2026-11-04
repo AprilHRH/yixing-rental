@@ -99,6 +99,9 @@ def verify_revision(page, base, browser, results, artifacts):
     values = {'账号': 'browser_client', '密码': 'Client@12345', '确认密码': 'Client@12345', '姓名': '客户端验收用户', '手机号': '13800006666', '身份证号': 'TEST-PORTAL-0001', '驾驶证号': 'TEST-DRIVER-0001'}
     for label, value in values.items(): client.get_by_label(label, exact=True).fill(value)
     expiry = client.get_by_label('驾驶证有效期至', exact=True); expiry.fill('2030-12-31'); expiry.press('Enter')
+    client.locator('.el-form-item').filter(has=client.locator('.el-form-item__label', has_text='密保问题')).locator('.el-select').click()
+    client.get_by_role('option', name='你出生的城市是哪里？', exact=True).click()
+    client.get_by_label('密保答案', exact=True).fill('南京测试')
     client.get_by_role('button', name='注册客户账户', exact=True).click()
     expect(client.get_by_role('button', name='登录我的易行', exact=True)).to_be_visible()
     client.get_by_label('密码', exact=True).fill('Client@12345')

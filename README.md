@@ -75,11 +75,13 @@ EXE 依赖完整项目，不能单独复制出去运行。普通启动复用已�
 | 前端 | `http://127.0.0.1:5173/` |
 | 后端 | `http://127.0.0.1:8080` |
 | 本机专用 MySQL | `127.0.0.1:3307` |
-| 管理员演示账号 | `admin` / `Admin@12345`，使用管理员登录入口。 |
-| 业务人员演示账号 | `staff` / `Staff@12345`，使用管理员登录入口。 |
-| 客户账号 | 使用客户登录入口，自主注册或由管理员关联已有客户档案。 |
+| 管理员演示账号 | `admin` / `88888888`，使用管理员登录入口。 |
+| 业务人员演示账号 | `staff` / `88888888`，使用管理员登录入口。 |
+| 五个客户演示账号 | `customer01`、`customer02`、`customer03`、`customer04`、`customer05`，初始密码均为 `88888888`，使用客户登录入口。 |
 
-演示账号由空库初始化生成，已被修改的密码不会因重启重置。管理员和业务人员具有相同管理权限；客户仅访问本人资料、订单和收退款。不要把默认账号直接用于公网环境。
+空库生成 7 个账号、5 份一一对应的客户档案和零笔订单。正常重启不清空数据，也不恢复已修改的密码。管理员和业务人员具有相同管理权限；客户仅访问本人资料、订单和收退款。管理员开通和初始化的客户账号未预设密保答案，首次登录必须设置本人密保。共享默认密码仅用于课程演示，公网演示不要存放真实资料，正式使用应立即修改密码并配置 HTTPS。
+
+**仅在明确需要清空演示业务时使用：**先停止本地前后端、构建最新后端，再运行 `python scripts/reset_accounts.py --confirm RESET-CUSTOMERS-AND-ORDERS`。工具先将完整 MySQL 备份保存到 `data/mysql/backups/时间标记/`，然后清空所有账号、客户、租赁订单、收退款和密码重置工单，重建上表账号；保留车辆、门店、价格、调度和保养数据，原出租中车辆恢复可用。此命令会删除原业务，普通启动不需要执行，不能放入开机或启动任务。
 
 ### MySQL 配置
 
@@ -116,13 +118,13 @@ python scripts/run.py --mysql --open
 | --- | --- | --- |
 | 工作台 | 查看经营概览、今日交还车、业务待办、车队状态和收入趋势。 | 待办来自真实订单和工单，点击后进入对应业务办理。 |
 | 车辆信息 | 新增、编辑、查询车辆，上传照片，切换卡片/列表，查看历史及导出 CSV。 | 门店与出租、维修等状态通过业务操作更新，不是任意手动改状态。 |
-| 客户管理 | 建档、编辑资料、检查驾驶证和限制租赁状态，查看历史订单。 | 客户档案不等于登录账号，需另行关联账号或使用客户注册。 |
+| 客户管理 | 建档同步开通账号、编辑客户资料与登录名/启用状态、查看历史订单、审核密码重置工单。 | 每个有效客户账号只绑定一份档案。注销或删除登录身份后，档案和历史记录仍保留，可在这里重新开通。 |
 | 租赁订单 | 创建预约、登记收款、交车、还车、补款/退款、结算和取消。 | 按订单当前状态显示可用操作，所有收退款先在线下确认。 |
 | 租金计算 | 选择车辆，按天、按里程或包月试算费用。 | 试算不会预留车辆；实际还车按订单价格快照和实际用量计费。 |
 | 车辆调度 | 查看门店车辆分布，创建、开始、完成或取消调度。 | 有后续预约时先处理订单，完成调度才更新车辆所属门店。 |
 | 维修保养 | 查看提醒，创建、开始、完成或取消工单，登记费用和下次保养条件。 | 未开工的工单仍保留提醒；有损坏的还车会自动生成检修工单。 |
 | 统计报表 | 按日期查看收入、订单和维修费用，切换车辆使用排行并导出。 | 收入按已结算订单的结算日期统计，押金不算收入。 |
-| 系统管理 | 管理账号、门店、保养提醒参数、日志和数据备份恢复。 | 管理员与业务人员权限相同，账号类型用于区分人员身份。 |
+| 系统管理 | 仅管理管理员、业务人员的账号，以及门店、保养参数、日志和数据备份恢复。 | 客户账号和重置工单在客户管理，不混入团队账号列表。 |
 
 ### 一笔租赁订单怎么办理
 
@@ -144,12 +146,15 @@ python scripts/run.py --mysql --open
 
 ### 客户端怎么使用
 
-1. 在登录页切到“客户登录”，首次使用点击注册，填写账号、联系方式、证件和驾驶证信息。
+1. 在登录页切到“客户登录”，使用已有账号登录；自主注册时填写账号、联系方式、证件、驾驶证及密保问题/答案。管理端开通的账号首次登录必须设置密保，后台在密保设置完成前也会拒绝预约等客户写操作。
 2. 在选车出行中筛选车型，选择租期、计费方式、预计里程和还车门店，试算后提交预约。
 3. 在我的订单中查看本人预约、订单进度和收退款记录。待取车且净收款为零的订单可以自行取消。
 4. 已有收款的预约需联系管理端确认退款并取消；交还车、收款和结算也由管理端处理。
 5. 在个人资料中修改姓名、电话和驾照资料。客户不能更改自己的角色、会员等级、身份证号或租赁限制。
 6. 不再使用账号时，进入个人资料底部的“注销账号”，输入当前密码并勾选确认。待取车、租赁中或待结算订单需先处理完成；注销只删除登录账号，客户档案、历史订单和收退款仍然保留。重新开通请联系管理员，不要重复注册已有证件。
+7. 点击右上角用户菜单中的“修改密码”验证原密码后修改，保存后重新登录。“密保设置”可修改密保问题，已设置过密保时需同时验证原答案。
+8. 忘记密码时，在客户登录页点击“忘记密码 / 密保？”查询密保问题，验证答案后设置新密码。答案区分大小写，只忽略两端空格。
+9. 忘记密保答案时，切到“忘记密保：提交工单”，填写客户账号、档案预留手机号、证件号及原因。系统统一返回受理提示，不透露账号或资料是否存在。门店核实本人身份后将密码重置为 `88888888`，旧会话失效、旧密保清除，再次登录须设置新密保。信息不匹配不会生成工单，需联系门店核对；同一账号已有待核验工单时不会重复创建。
 
 ### 调度、养护和系统管理
 
@@ -157,11 +162,13 @@ python scripts/run.py --mysql --open
 | --- | --- |
 | 调度车辆 | 创建任务，选择车辆、目标门店、负责人和时间；确认无预约冲突后开始，到达后完成任务。 |
 | 维修保养 | 创建工单，选择车辆、维修或保养项目及负责人；开工后车辆进入维修状态，完工时登记实际费用和下次保养条件。 |
-| 新增登录账号 | 系统管理 → 账号与权限 → 新增账号，选择管理员、业务人员或客户。新增客户可同时填写联系方式和驾照资料建档，也可关闭“同时新建客户档案”，关联已有的唯一客户档案。 |
-| 编辑客户账号 | 在账号列表搜索姓名或账号，编辑登录名、姓名、启用状态，或重置密码。客户档案不可重新绑定到另一个人；电话、驾照等资料在客户管理修改。 |
+| 新增团队账号 | 系统管理 → 账号与权限 → 新增账号，仅选择管理员或业务人员。 |
+| 新增客户账号 | 客户管理 → 新增客户，同时填写客户资料、登录名和初始密码。客户档案与账号在同一事务内创建，任一步失败全部回滚。 |
+| 编辑客户账号 | 客户管理中按姓名、电话或账号搜索，点击“账号”编辑登录名、启用状态；注销后的档案可重新开通账号。姓名、电话、驾照等通过“编辑”维护，不允许将账号转绑给其他客户。 |
+| 重置客户密码 | 客户管理 → 密码重置工单 → 核验重置。通过档案预留电话或到店证件核实本人身份，填写核验说明并勾选确认后，才能重置为 `88888888`；也可填写原因驳回。不能仅凭工单中的自述认定本人，不能在普通客户编辑中跳过工单直接改密。 |
 | 删除登录账号 | 在账号行点击删除，输入该登录账号确认。不能删除当前账号，也不能删除、禁用或降级最后一个启用的管理员；有未完成订单的客户需先处理订单。只删除登录身份，保留历史业务。 |
 | 调整提醒 | 在系统参数中设置提前提醒天数和里程，任一条件满足即可提醒。 |
-| 修改密码 | 从用户菜单进入修改密码，保存后需要重新登录；管理员也可在账号编辑中重置其他账号密码，旧密码对应的会话会失效。 |
+| 修改密码 | 从用户菜单进入修改密码，保存后需要重新登录；客户须先设密保。团队密码可在系统管理编辑中重置，客户忘记密码走密保或核验工单。 |
 | 导出备份 | 系统管理 → 数据备份与恢复 → 下载 ZIP，妥善保管数据库记录和上传图片。 |
 | 恢复备份 | 先确认已保存当前数据备份，再选择可信 ZIP，输入 `RESTORE` 确认。恢复会替换当前数据，并使全部会话失效。 |
 
@@ -255,13 +262,19 @@ python scripts/run.py --mysql --open
 | [backend/src/main/java/com/yixing/auth/Access.java](backend/src/main/java/com/yixing/auth/Access.java) | 获取当前操作人、检查管理员身份和记录操作日志。 |
 | [backend/src/main/java/com/yixing/auth/AccountService.java](backend/src/main/java/com/yixing/auth/AccountService.java) | 客户注册与注销、账号删除、重复检查、未完成订单拦截和最后一个管理员保护；账号事务与客户下单共用事务锁，避免注销和预约互相穿过校验。 |
 | [backend/src/main/java/com/yixing/auth/AccountUpgrade.java](backend/src/main/java/com/yixing/auth/AccountUpgrade.java) | 启动时兼容旧账号结构和旧业务人员权限。 |
+| [backend/src/main/java/com/yixing/auth/RecoveryService.java](backend/src/main/java/com/yixing/auth/RecoveryService.java) | 密保设置、改密、密保找回、重置工单提交与核验，答案只保存 BCrypt 哈希；重置后清除旧密保并令旧会话失效。 |
+| [backend/src/main/java/com/yixing/auth/RecoveryController.java](backend/src/main/java/com/yixing/auth/RecoveryController.java) | 客户密保/找回和管理端工单接口，找回尝试按账号限速。 |
+| [backend/src/main/java/com/yixing/auth/RecoveryThrottle.java](backend/src/main/java/com/yixing/auth/RecoveryThrottle.java) | 有过期时间和容量上限的内存限速：每来源 15 分钟 60 次找回请求，每账号 15 分钟最多 5 次答案验证或工单提交；服务器重启后计数清零，代理层另按真实 IP 限速。 |
+| [backend/src/main/java/com/yixing/auth/SecurityQuestions.java](backend/src/main/java/com/yixing/auth/SecurityQuestions.java) | 可选密保问题及答案长度、编码规则。 |
 | [backend/src/main/java/com/yixing/common/Values.java](backend/src/main/java/com/yixing/common/Values.java) | 统一读取、转换和校验字符串、金额、整数与日期。 |
 | [backend/src/main/java/com/yixing/common/BusinessException.java](backend/src/main/java/com/yixing/common/BusinessException.java) | 业务条件不满足时中止操作，如租期冲突、押金不足。 |
 | [backend/src/main/java/com/yixing/common/ApiErrors.java](backend/src/main/java/com/yixing/common/ApiErrors.java) | 将异常转换成前端可显示的状态码和消息。 |
 | [backend/src/main/java/com/yixing/data/Store.java](backend/src/main/java/com/yixing/data/Store.java) | 数据访问入口，提供查询、新增、更新和行锁。 |
 | [backend/src/main/java/com/yixing/data/DataMapper.java](backend/src/main/java/com/yixing/data/DataMapper.java) | MyBatis 映射，执行 SQL 查询和写入。 |
 | [backend/src/main/java/com/yixing/data/Statements.java](backend/src/main/java/com/yixing/data/Statements.java) | 按字段生成新增、修改 SQL，实际值使用参数绑定。 |
-| [backend/src/main/java/com/yixing/data/DemoData.java](backend/src/main/java/com/yixing/data/DemoData.java) | 空库初始化虚构演示账号、车辆、客户、门店和历史业务数据，不用于重置已有数据库。 |
+| [backend/src/main/java/com/yixing/data/DemoData.java](backend/src/main/java/com/yixing/data/DemoData.java) | 空库初始化虚构车辆、门店和账号，默认零订单。仅隔离回归测试显式启用历史订单夹具，不用于重置已有库。 |
+| [backend/src/main/java/com/yixing/data/AccountSeed.java](backend/src/main/java/com/yixing/data/AccountSeed.java) | 统一创建 admin、staff 及五个有关联档案的客户账号，密码均为 88888888，不预设密保答案。 |
+| [backend/src/main/java/com/yixing/data/AccountReset.java](backend/src/main/java/com/yixing/data/AccountReset.java) | 仅显式非 Web 维护模式可执行的事务重置入口，清空账号、客户、订单、流水及重置工单，保留车队和运营配置。 |
 
 源码目录 `backend/src/main/java/com/yixing/data/` 与根目录 `data/` 不是同一个目录：前者是 Java 代码，后者保存本地运行数据。
 
@@ -296,13 +309,13 @@ python scripts/run.py --mysql --open
 | 登录注册 | [frontend/src/views/Login.vue](frontend/src/views/Login.vue) | 管理端/客户端切换、登录、客户注册及登录页局部样式。 |
 | 工作台 | [frontend/src/views/Dashboard.vue](frontend/src/views/Dashboard.vue) | 经营概览、今日交还车、业务待办、状态与收入图表。 |
 | 车辆管理 | [frontend/src/views/Vehicles.vue](frontend/src/views/Vehicles.vue) | 车辆卡片/列表、筛选、建档、编辑、详情和启停。 |
-| 客户管理 | [frontend/src/views/Customers.vue](frontend/src/views/Customers.vue) | 客户建档、资料修改、租赁限制和历史记录。 |
+| 客户管理 | [frontend/src/views/Customers.vue](frontend/src/views/Customers.vue) | 客户建档与账号关联、资料和登录身份维护、租赁限制、历史记录及密码重置工单审核。 |
 | 租赁订单 | [frontend/src/views/Orders.vue](frontend/src/views/Orders.vue) | 预约表单、报价、订单详情和收款、交还车、结算操作。 |
 | 租金试算 | [frontend/src/views/Pricing.vue](frontend/src/views/Pricing.vue) | 三种计费输入切换和后端试算结果展示。 |
 | 车辆调度 | [frontend/src/views/Dispatch.vue](frontend/src/views/Dispatch.vue) | 门店运力、调度创建、开始、到达和取消。 |
 | 维修保养 | [frontend/src/views/Maintenance.vue](frontend/src/views/Maintenance.vue) | 提醒、工单、新建和完工登记。 |
 | 统计报表 | [frontend/src/views/Reports.vue](frontend/src/views/Reports.vue) | 日期查询、趋势、车辆排行和导出。 |
-| 系统管理 | [frontend/src/views/Settings.vue](frontend/src/views/Settings.vue) | 账号、门店、参数、日志和备份恢复。 |
+| 系统管理 | [frontend/src/views/Settings.vue](frontend/src/views/Settings.vue) | 管理员与业务人员账号、门店、参数、日志和备份恢复。 |
 | 客户端 | [frontend/src/views/CustomerPortal.vue](frontend/src/views/CustomerPortal.vue) | 选车出行、我的订单和个人资料，根据路由切换视图。 |
 
 ### UI：样式与公共组件
@@ -313,6 +326,9 @@ python scripts/run.py --mysql --open
 | [frontend/src/workspace.css](frontend/src/workspace.css) | 工作空间的字号、间距、控件和业务区域布局。 |
 | [frontend/src/refinement.css](frontend/src/refinement.css) | 当前主题、侧栏、字体、指标数字和表格等视觉细化。 |
 | [frontend/src/components/FormDialog.vue](frontend/src/components/FormDialog.vue) | 按字段配置生成共用表单弹窗，支持输入、下拉、日期、开关和图片上传。 |
+| [frontend/src/components/CustomerSecurity.vue](frontend/src/components/CustomerSecurity.vue) | 客户首次登录强制设置密保及后续密保修改弹窗。 |
+| [frontend/src/components/PasswordRecovery.vue](frontend/src/components/PasswordRecovery.vue) | 登录页密保找回与忘记答案时的重置工单申请。 |
+| [frontend/src/security.js](frontend/src/security.js) | 与后端约定一致的密保问题代码及中文选项。 |
 | [frontend/src/components/ChartPanel.vue](frontend/src/components/ChartPanel.vue) | ECharts 创建、尺寸调整、更新和销毁。图表数据配置在工作台和报表页面。 |
 | [frontend/src/components/StatusTag.vue](frontend/src/components/StatusTag.vue) | 车辆、订单、任务等状态的中文名称和颜色。 |
 | [frontend/src/components/VehicleIdentity.vue](frontend/src/components/VehicleIdentity.vue) | 组合车辆缩略图、品牌车型和车牌，统一各页面的车辆信息。 |
@@ -344,6 +360,7 @@ python scripts/run.py --mysql --open
 | [scripts/build-launcher.ps1](scripts/build-launcher.ps1) | 用 Windows 内置 .NET Framework 编译器重新生成根目录 EXE。 |
 | [scripts/run.py](scripts/run.py) | 检查环境、按需构建、启动前后端、识别就绪状态，只停止本次创建的进程。 |
 | [scripts/local_mysql.py](scripts/local_mysql.py) | 管理项目专用本机 MySQL、私有密码配置和数据库连接。 |
+| [scripts/reset_accounts.py](scripts/reset_accounts.py) | 显式本地维护工具：先检查后端停服并备份 MySQL，再事务清空旧账号/客户/订单/流水/重置申请，重建 7 个演示账号。不是日常启动步骤，不支持远程数据库。 |
 | [scripts/migrate_local_mysql.py](scripts/migrate_local_mysql.py) | 将已有本地 H2 数据迁往项目 MySQL，并保留核对和备份资料；不是日常启动步骤。 |
 | [scripts/test_mysql.py](scripts/test_mysql.py) | 使用独立 MySQL 测试数据库构建并执行后端测试，可选追加浏览器验收。 |
 | [scripts/vscode.ps1](scripts/vscode.ps1) | 为 VS Code 查找并准备项目的 Java、Maven 运行环境。 |
@@ -356,6 +373,7 @@ python scripts/run.py --mysql --open
 | [backend/src/test/java/com/yixing/RentalWorkflowTest.java](backend/src/test/java/com/yixing/RentalWorkflowTest.java) | 租赁闭环、冲突、收退款及关联业务。 |
 | [backend/src/test/java/com/yixing/CustomerPortalTest.java](backend/src/test/java/com/yixing/CustomerPortalTest.java) | 客户注册、本人数据隔离、预约和权限。 |
 | [backend/src/test/java/com/yixing/AccountLifecycleTest.java](backend/src/test/java/com/yixing/AccountLifecycleTest.java) | 三类账号创建编辑删除、客户注销、密码及会话、事务回滚、档案与历史记录保留、最后一个管理员保护。 |
+| [backend/src/test/java/com/yixing/AccountRecoveryTest.java](backend/src/test/java/com/yixing/AccountRecoveryTest.java) | 初始化数量、账号分流、建档原子性、密保哈希、找回与人工核验、限速、会话失效、维护清空及正常重启保护。 |
 | [frontend/src/dashboard.test.js](frontend/src/dashboard.test.js) | 待办与车辆分类逻辑、车型参考图和图片回退。 |
 | [tests/test_launcher.py](tests/test_launcher.py) | 启动器环境、服务复用、端口冲突、构建和停止逻辑的单元测试。 |
 | [tests/browser_acceptance.py](tests/browser_acceptance.py) | 启动隔离服务，验收八个业务模块和租赁流程。 |
@@ -363,7 +381,7 @@ python scripts/run.py --mysql --open
 | [tests/order_photo_acceptance.py](tests/order_photo_acceptance.py) | 订单中车辆图片展示检查。 |
 | [tests/vehicle_photo_acceptance.py](tests/vehicle_photo_acceptance.py) | 车型图片与回退检查。 |
 | [tests/revision_acceptance.py](tests/revision_acceptance.py) | 客户端及调整后的业务与权限验收。 |
-| [tests/account_acceptance.py](tests/account_acceptance.py) | 实际操作三类账号的新增、编辑、删除及客户注销，检查桌面和手机弹窗，并由浏览器验收入口调用。 |
+| [tests/account_acceptance.py](tests/account_acceptance.py) | 实际操作团队账号、客户建档与账号管理、首次密保、客户改密、密保找回、重置工单和注销，检查桌面与手机布局。 |
 | [tests/check_preserved_records.py](tests/check_preserved_records.py) | 与旧数据库基线核对业务记录，仅在基线存在时使用。 |
 | [tests/launcher_cold_start.py](tests/launcher_cold_start.py) | 在隔离端口检查真实前后端冷启动；脚本还要求原项目服务已运行。 |
 | [tests/launcher_window_preview.py](tests/launcher_window_preview.py) | Windows 启动器窗口和服务复用检查，截图写入本地测试产物目录。 |
@@ -411,10 +429,15 @@ python scripts/run.py --mysql --open
 | 模块 | 方法与路径 | 用途 |
 | --- | --- | --- |
 | 认证 | `POST /api/auth/login` | 传 `username`、`password`、`portal`（`ADMIN`/`CUSTOMER`）登录。 |
-| 认证 | `POST /api/auth/register` | 仅客户注册，传账号、姓名、电话、证件和驾照资料。 |
+| 认证 | `POST /api/auth/register` | 仅客户注册，传账号、姓名、电话、证件、驾照及 `security_question`、`security_answer`。 |
 | 认证 | `GET /api/auth/me`、`POST /api/auth/logout` | 查询登录身份、退出。 |
 | 认证 | `POST /api/auth/password` | 传 `old_password`、`new_password`，修改后退出。 |
 | 认证 | `DELETE /api/auth/account` | 客户传当前 `password` 和 `confirmation=CLOSE` 注销本人账号，未完成订单会拦截；其他登录会话失效。 |
+| 密保 | `POST /api/auth/security` | 客户传当前 `password`、问题代码 `security_question` 和答案 `security_answer`；修改已有密保还需 `old_security_answer`。 |
+| 找回 | `POST /api/auth/recovery/question`、`POST /api/auth/recovery/password` | 匿名客户查询问题；传账号、密保答案和 `new_password` 找回密码，仅适用于启用的客户账号。 |
+| 工单 | `POST /api/auth/recovery/tickets` | 匿名提交账号、档案电话/证件号及原因，匹配后创建唯一待核验工单；不自动重置密码。 |
+| 工单 | `GET /api/customers/reset-tickets`、`POST /api/customers/reset-tickets/{id}/review` | 管理端查询和审核；传 `action=APPROVE/REJECT`、`review_notes`，批准还需 `verified=true`；已处理工单不能再次重置。 |
+| 客户账号 | `GET/POST /api/customers/accounts`、`PUT/DELETE /api/customers/accounts/{id}` | 客户登录身份查询、开通、编辑、删除；不支持在编辑中直接重置客户密码。 |
 | 管理端数据 | `GET /api/bootstrap`、`GET /api/dashboard` | 业务基础数据和工作台统计。 |
 | 图片 | `POST /api/uploads`、`GET /uploads/{name}` | 上传表单字段 `file`，只接收 5 MB 以内有效 PNG/JPEG；读取图片需要登录。 |
 | 车辆 | `POST /api/vehicles`、`PUT /api/vehicles/{id}` | 新增、编辑车辆档案。 |
@@ -426,9 +449,9 @@ python scripts/run.py --mysql --open
 | 调度 | `POST /api/dispatch`、`POST /api/dispatch/{id}/{action}` | 创建调度；操作为 `start`、`complete`、`cancel`。 |
 | 养护 | `POST /api/maintenance`、`POST /api/maintenance/{id}/{action}` | 创建工单；操作为 `start`、`complete`、`cancel`。 |
 | 报表 | `GET /api/reports?from=YYYY-MM-DD&to=YYYY-MM-DD` | 区间最多 367 天。 |
-| 系统 | `GET /api/system` | 账号、系统参数和最近 300 条日志。 |
-| 账号 | `POST /api/system/users`、`PUT /api/system/users/{id}` | 创建、编辑三类账号；编辑时密码留空不修改。客户新建可不传 `customer_id`，同时传姓名、电话、证件和驾照字段建档；有编号时关联已有档案。 |
-| 账号 | `DELETE /api/system/users/{id}` | 管理端传 `confirmation=DELETE` 删除登录账号，校验当前账号、最后一个管理员和客户未完成订单；保留客户档案及历史业务。 |
+| 系统 | `GET /api/system` | 仅团队账号、系统参数和最近 300 条日志。 |
+| 团队账号 | `POST /api/system/users`、`PUT /api/system/users/{id}` | 仅创建/编辑管理员或业务人员；编辑时密码留空不修改，客户账号请求在此被拒绝。 |
+| 团队账号 | `DELETE /api/system/users/{id}` | 传 `confirmation=DELETE` 删除团队账号，保护当前账号及最后一个启用管理员。客户账号由客户管理的专用路由删除。 |
 | 门店 | `POST /api/system/branches`、`PUT /api/system/branches/{id}` | 创建、编辑门店。 |
 | 参数 | `PUT /api/system/settings` | 设置 `reminder_days`、`reminder_km`。 |
 | 计费参数 | `PUT /api/system/pricing/{id}` | 后端保留价格规则维护接口，不追溯改变已有订单快照。 |
@@ -455,7 +478,8 @@ python scripts/run.py --mysql --open
 
 | 表名 | 在项目中的作用 |
 | --- | --- |
-| `sys_user` | 登录账号、角色、账号类型和关联客户编号。 |
+| `sys_user` | 登录账号、角色、账号类型、唯一关联客户编号、密保问题代码和答案哈希。密码和答案哈希不通过普通接口返回。 |
+| `password_reset_ticket` | 客户重置申请、绑定的原账号/客户编号、预留联系方式、处理状态、核验说明和操作人员。账号删除后保留工单供审计，不会据此复活账号。 |
 | `customer` | 客户资料、驾照有效期和租赁限制。 |
 | `vehicle` | 车辆档案、里程、门店、状态、图片和价格规则关联。 |
 | `branch` | 取还车与调度使用的门店。 |
@@ -519,7 +543,7 @@ python -m playwright install chromium ffmpeg
 python tests/browser_acceptance.py
 ```
 
-普通浏览器验收使用隔离的 8081 后端、5174 前端和测试数据库，要求对应端口空闲、后端 JAR 已构建。截图、录屏和结果写入 `data/test-artifacts/browser/`。如需 MySQL 浏览器闭环，执行：
+普通浏览器验收使用隔离的 18081 后端、15174 前端和测试数据库，可用 `BROWSER_BACKEND_PORT`、`BROWSER_FRONTEND_PORT` 环境变量更换，要求对应端口空闲、后端 JAR 已构建。截图、录屏和结果写入 `data/test-artifacts/browser/`。如需 MySQL 浏览器闭环，执行：
 
 ```powershell
 python scripts/test_mysql.py --browser

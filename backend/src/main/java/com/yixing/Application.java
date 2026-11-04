@@ -6,6 +6,9 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 @SpringBootApplication
 public class Application {
     public static void main(String[] arguments) {
-        SpringApplication.run(Application.class, arguments);
+        var context = SpringApplication.run(Application.class, arguments);
+        if (java.util.Arrays.stream(arguments).anyMatch(argument -> argument.startsWith("--app.reset-accounts="))) {
+            context.close();
+        }
     }
 }

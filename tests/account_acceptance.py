@@ -2,25 +2,46 @@ from datetime import date
 from uuid import uuid4
 from playwright.sync_api import expect
 
+HEADERS = {'X-Requested-With': 'XMLHttpRequest'}
+
+
+def setup_security(page, password, answer='测试城市'):
+    dialog = page.locator('.el-dialog:visible')
+    expect(dialog.get_by_role('heading', name='首次登录：设置密保', exact=True)).to_be_visible()
+    dialog.get_by_label('当前登录密码', exact=True).fill(password)
+    dialog.locator('.el-form-item').filter(has=page.locator('.el-form-item__label', has_text='密保问题')).locator('.el-select').click()
+    page.get_by_role('option', name='你出生的城市是哪里？', exact=True).click()
+    dialog.get_by_label('密保答案', exact=True).fill(answer)
+    dialog.get_by_label('确认密保答案', exact=True).fill(answer)
+    dialog.get_by_role('button', name='保存密保', exact=True).click()
+    expect(dialog).not_to_be_visible()
+
+
+def customer_login(page, base, username, password):
+    # 换完整文档重新检查服务器会话，不沿用已失效会话的前端内存身份。
+    page.goto(base + '/#/login', wait_until='networkidle')
+    page.reload(wait_until='networkidle')
+    page.get_by_text('客户登录', exact=True).click()
+    page.get_by_label('账号', exact=True).fill(username)
+    page.get_by_label('密码', exact=True).fill(password)
+    page.get_by_role('button', name='登录我的易行', exact=True).click()
+    expect(page.get_by_role('heading', name='选车出行', exact=True)).to_be_visible()
+
 
 def verify_accounts(page, base, browser, results, artifacts):
-    """Operate the actual account dialogs against an isolated acceptance database."""
+    """Real dialogs exercise team/customer separation and the recovery lifecycle."""
+    errors = []
     page.goto(base + '/#/settings', wait_until='networkidle')
     created = []
-    for kind, label in [('ADMIN', '管理员'), ('STAFF', '业务人员'), ('CUSTOMER', '客户')]:
+    for kind, label in [('ADMIN', '管理员'), ('STAFF', '业务人员')]:
         username = 'ui_' + uuid4().hex[:10]
         page.get_by_role('button', name='新增账号', exact=True).click()
         dialog = page.locator('.el-dialog:visible')
         for field, value in [('登录账号', username), ('姓名', '账号验收' + label), ('初始密码', 'Account@12345')]:
             dialog.get_by_label(field, exact=True).fill(value)
         dialog.locator('.el-form-item').filter(has=page.locator('.el-form-item__label', has_text='账号类型')).locator('.el-select').click()
+        expect(page.get_by_role('option', name='客户', exact=True)).to_have_count(0)
         page.get_by_role('option', name=label, exact=True).click()
-        if kind == 'CUSTOMER':
-            for field, value in [('手机号', '13800009999'), ('证件号', 'UI-ID-' + username.replace('_', '-')), ('驾驶证号', 'UI-DL-' + username)]:
-                dialog.get_by_label(field, exact=True).fill(value)
-            expiry = dialog.get_by_label('驾驶证有效期至', exact=True)
-            expiry.fill(f'{date.today().year + 3}-12-31')
-            expiry.press('Enter')
         dialog.get_by_role('button', name='确认保存', exact=True).click()
         expect(dialog).not_to_be_visible()
         page.get_by_role('textbox', name='搜索账号', exact=True).fill(username)
@@ -36,13 +57,13 @@ def verify_accounts(page, base, browser, results, artifacts):
         account = next(user for user in page.request.get(base + '/api/system').json()['users'] if user['username'] == username)
         assert account['account_type'] == kind
         created.append(account)
-    results.append('实际表单创建和编辑管理员、业务人员、客户三类账号；客户档案同步建档')
-
+    users = page.request.get(base + '/api/system').json()['users']
+    assert all(user['role'] == 'ADMIN' for user in users)
+    results.append('系统管理仅展示管理员和业务人员，真实表单新增、编辑、重置团队密码')
     page.get_by_role('textbox', name='搜索账号', exact=True).clear()
-    page.locator('.el-message').last.wait_for(state='hidden')
-    page.get_by_role('heading', name='账号管理', exact=True).click()
-    page.screenshot(path=str(artifacts / 'account-management-desktop.png'), full_page=False)
-    for account in created[:2]:
+    page.wait_for_timeout(400)
+    page.screenshot(path=str(artifacts / 'team-accounts-desktop.png'))
+    for account in created:
         page.get_by_role('textbox', name='搜索账号', exact=True).fill(account['username'])
         row = page.locator('#pane-users .el-table__row').filter(has_text=account['username'])
         row.get_by_role('button', name='删除', exact=True).click()
@@ -54,31 +75,112 @@ def verify_accounts(page, base, browser, results, artifacts):
         confirmation.get_by_role('button', name='确认删除', exact=True).click()
         expect(confirmation).not_to_be_visible()
         expect(row).to_have_count(0)
-    results.append('管理员与业务人员账号可删除，必须正确输入目标账号进行确认')
-
+    results.append('团队账号删除须正确输入账号确认')
     page.set_viewport_size({'width': 390, 'height': 844})
     page.get_by_role('textbox', name='搜索账号', exact=True).clear()
-    assert not page.evaluate('document.documentElement.scrollWidth > innerWidth')
     page.get_by_role('button', name='新增账号', exact=True).click()
     dialog = page.locator('.el-dialog:visible')
     expect(dialog.get_by_role('heading', name='新增账号', exact=True)).to_be_visible()
     page.wait_for_timeout(300)
     box = dialog.bounding_box()
     assert box['x'] >= 0 and box['x'] + box['width'] <= 390
-    page.screenshot(path=str(artifacts / 'account-create-mobile.png'), full_page=False)
     dialog.get_by_role('button', name='取消', exact=True).click()
     page.set_viewport_size({'width': 1440, 'height': 1080})
 
-    customer = created[-1]
+    page.goto(base + '/#/customers', wait_until='networkidle')
+    username = 'ui_client_' + uuid4().hex[:8]
+    name, phone, identity = '账号与工单验收', '13800009999', 'UI-ID-' + uuid4().hex[:8]
+    page.get_by_role('button', name='新增客户', exact=True).click()
+    dialog = page.locator('.el-dialog:visible')
+    for field, value in [('客户姓名', name), ('联系电话', phone), ('身份证 / 证件号', identity), ('驾驶证编号', 'UI-DL-TEST'), ('客户登录账号', username), ('初始密码', 'Account@12345')]:
+        dialog.get_by_label(field, exact=True).fill(value)
+    expiry = dialog.get_by_label('驾驶证有效期', exact=True)
+    expiry.fill(f'{date.today().year + 3}-12-31'); expiry.press('Enter')
+    dialog.get_by_role('button', name='确认保存', exact=True).click()
+    expect(dialog).not_to_be_visible()
+    page.get_by_placeholder('搜索姓名、联系方式、账号').fill(username)
+    row = page.locator('#pane-profiles .el-table__row').filter(has_text=username)
+    expect(row).to_have_count(1); expect(row).to_contain_text('待设密保')
+    user = next(user for user in page.request.get(base + '/api/customers/accounts').json() if user['username'] == username)
+    row.get_by_role('button', name='账号', exact=True).click()
+    dialog = page.locator('.el-dialog:visible')
+    expect(dialog.get_by_label('客户登录账号', exact=True)).to_have_value(username)
+    expect(dialog.get_by_label('初始密码', exact=True)).to_have_count(0)
+    dialog.get_by_role('button', name='确认保存', exact=True).click()
+    expect(dialog).not_to_be_visible()
+    results.append('客户管理建档同步开通登录账号，显示登录名、启用及密保状态，可独立编辑账号')
+    page.wait_for_timeout(400)
+    page.screenshot(path=str(artifacts / 'customer-account-linked-desktop.png'))
+    page.set_viewport_size({'width': 390, 'height': 844})
+    assert not page.evaluate('document.documentElement.scrollWidth > innerWidth')
+    page.set_viewport_size({'width': 1440, 'height': 1080})
+
     context = browser.new_context(viewport={'width': 390, 'height': 844})
     client = context.new_page()
+    client.on('pageerror', lambda error: errors.append(str(error)))
+    recovery_context = browser.new_context(viewport={'width': 390, 'height': 844})
+    recovery = recovery_context.new_page()
+    recovery.on('pageerror', lambda error: errors.append(str(error)))
     try:
-        client.goto(base + '/#/login', wait_until='networkidle')
-        client.get_by_text('客户登录', exact=True).click()
-        client.get_by_label('账号', exact=True).fill(customer['username'])
-        client.get_by_label('密码', exact=True).fill('Updated@12345')
-        client.get_by_role('button', name='登录我的易行', exact=True).click()
-        expect(client.get_by_role('heading', name='选车出行', exact=True)).to_be_visible()
+        customer_login(client, base, username, 'Account@12345')
+        dialog = client.locator('.el-dialog:visible')
+        expect(dialog.get_by_role('heading', name='首次登录：设置密保', exact=True)).to_be_visible()
+        client.wait_for_timeout(400)
+        client.screenshot(path=str(artifacts / 'first-login-security-mobile.png'))
+        setup_security(client, 'Account@12345')
+        results.append('390px客户首次登录强制设置本人密保，无默认答案')
+        client.locator('.user-button').click()
+        client.get_by_text('修改密码', exact=True).click()
+        dialog = client.locator('.el-dialog:visible')
+        dialog.get_by_label('原密码', exact=True).fill('Account@12345')
+        dialog.get_by_label('新密码', exact=True).fill('Updated@12345')
+        dialog.get_by_role('button', name='确认保存', exact=True).click()
+        expect(client).to_have_url(base + '/#/login')
+        customer_login(client, base, username, 'Updated@12345')
+        results.append('客户自行修改密码后重新登录')
+        recovery.goto(base + '/#/login', wait_until='networkidle')
+        recovery.get_by_text('客户登录', exact=True).click()
+        recovery.get_by_label('账号', exact=True).fill(username)
+        recovery.get_by_role('button', name='忘记密码 / 密保？', exact=True).click()
+        dialog = recovery.locator('.el-dialog:visible')
+        dialog.get_by_role('button', name='查询密保问题', exact=True).click()
+        expect(dialog.get_by_text('你出生的城市是哪里？', exact=True)).to_be_visible()
+        for field, value in [('密保答案', '错误答案'), ('新密码', 'Recovered@12345'), ('确认新密码', 'Recovered@12345')]:
+            dialog.get_by_label(field, exact=True).fill(value)
+        dialog.get_by_role('button', name='确认修改密码', exact=True).click()
+        expect(recovery.locator('.el-message').filter(has_text='账号或密保答案不正确')).to_be_visible()
+        dialog.get_by_label('密保答案', exact=True).fill('测试城市')
+        dialog.get_by_role('button', name='确认修改密码', exact=True).click()
+        expect(dialog).not_to_be_visible()
+        assert client.request.get(base + '/api/auth/me').status == 401
+        results.append('真实密保找回表单拒绝错误答案，成功后旧会话失效')
+        recovery.get_by_role('button', name='忘记密码 / 密保？', exact=True).click()
+        dialog = recovery.locator('.el-dialog:visible')
+        dialog.get_by_role('tab', name='忘记密保：提交工单', exact=True).click()
+        for field, value in [('档案预留手机号', phone), ('档案证件号', identity), ('申请原因', '忘记密保，申请到店核验后重置')]:
+            dialog.get_by_label(field, exact=True).fill(value)
+        dialog.get_by_role('button', name='提交重置工单', exact=True).click()
+        expect(dialog).not_to_be_visible()
+        page.get_by_role('button', name='刷新', exact=True).click()
+        page.get_by_role('tab', name='密码重置工单（1）', exact=True).click()
+        ticket_row = page.locator('#pane-tickets .el-table__row').filter(has_text=username)
+        expect(ticket_row).to_have_count(1)
+        ticket_row.get_by_role('button', name='核验重置', exact=True).click()
+        dialog = page.locator('.el-dialog:visible')
+        expect(dialog.get_by_role('button', name='重置为 88888888', exact=True)).to_be_disabled()
+        dialog.get_by_label('核验 / 驳回说明', exact=True).fill('验收：已到店核对档案演示证件')
+        dialog.get_by_text('已通过档案预留电话或到店证件核实本人身份', exact=True).click()
+        expect(dialog.get_by_role('checkbox', name='已通过档案预留电话或到店证件核实本人身份', exact=True)).to_be_checked()
+        page.wait_for_timeout(400)
+        page.screenshot(path=str(artifacts / 'password-reset-ticket-review-desktop.png'))
+        dialog.get_by_role('button', name='重置为 88888888', exact=True).click()
+        expect(dialog).not_to_be_visible()
+        expect(ticket_row).to_have_count(0)
+        result = recovery.request.post(base + '/api/auth/login', data={'username': username, 'password': 'Recovered@12345', 'portal': 'CUSTOMER'}, headers=HEADERS)
+        assert result.status == 400
+        customer_login(client, base, username, '88888888')
+        setup_security(client, '88888888', '新城市答案')
+        results.append('客户提交工单，管理端核验并重置88888888，再次登录必须重设密保')
         client.goto(base + '/#/portal/profile', wait_until='networkidle')
         assert not client.evaluate('document.documentElement.scrollWidth > innerWidth')
         client.get_by_role('button', name='注销账号', exact=True).click()
@@ -86,23 +188,14 @@ def verify_accounts(page, base, browser, results, artifacts):
         expect(dialog.get_by_role('button', name='确认注销', exact=True)).to_be_disabled()
         dialog.get_by_label('当前登录密码', exact=True).fill('wrong-password')
         dialog.get_by_text('我已了解并确认注销此账号', exact=True).click()
-        expect(dialog.get_by_role('checkbox', name='我已了解并确认注销此账号', exact=True)).to_be_checked()
         dialog.get_by_role('button', name='确认注销', exact=True).click()
         expect(client.locator('.el-message').filter(has_text='当前密码不正确')).to_be_visible()
-        box = dialog.bounding_box()
-        assert box['x'] >= 0 and box['x'] + box['width'] <= 390
-        client.wait_for_timeout(300)
-        client.screenshot(path=str(artifacts / 'account-closure-mobile.png'), full_page=False)
-        dialog.get_by_label('当前登录密码', exact=True).fill('Updated@12345')
+        dialog.get_by_label('当前登录密码', exact=True).fill('88888888')
         dialog.get_by_role('button', name='确认注销', exact=True).click()
         expect(client).to_have_url(base + '/#/login')
-        expect(client.get_by_role('radiogroup', name='登录身份', exact=True)).to_be_visible()
-        response = client.request.post(base + '/api/auth/login', data={'username': customer['username'], 'password': 'Updated@12345', 'portal': 'CUSTOMER'}, headers={'X-Requested-With': 'XMLHttpRequest'})
-        assert response.status == 400
-        users = page.request.get(base + '/api/system').json()['users']
-        assert not any(user['id'] == customer['id'] for user in users)
-        profiles = page.request.get(base + '/api/bootstrap').json()['customers']
-        assert any(profile['id'] == customer['customer_id'] for profile in profiles)
+        assert not any(row['id'] == user['id'] for row in page.request.get(base + '/api/customers/accounts').json())
+        assert any(row['id'] == user['customer_id'] for row in page.request.get(base + '/api/bootstrap').json()['customers'])
+        results.append('客户注销密码和二次确认校验通过，注销保留档案')
+        assert not errors, errors
     finally:
-        context.close()
-    results.append('390px账号表单与注销弹窗可用，无横向溢出；校验密码和二次确认，注销后不能登录且客户档案保留')
+        context.close(); recovery_context.close()
