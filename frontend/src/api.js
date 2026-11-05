@@ -10,6 +10,13 @@ api.interceptors.response.use(response => response.data, error => {
   return Promise.reject(error)
 })
 
+export function reportUnexpectedError(error) {
+  // 接口错误已由拦截器提示；请求发出前的脚本错误也必须让用户看得见。
+  if (axios.isAxiosError(error)) return
+  console.error('业务操作失败', error)
+  ElMessage.error(error instanceof Error ? error.message : '操作未完成，请刷新页面后重试')
+}
+
 export function download(content, name, type = 'text/csv;charset=utf-8') {
   const url = URL.createObjectURL(new Blob([content], { type }))
   const anchor = document.createElement('a')

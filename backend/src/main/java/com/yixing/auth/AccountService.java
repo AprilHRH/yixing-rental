@@ -56,8 +56,10 @@ public class AccountService {
         Map<String, Object> user = lockCustomerAccount(id);
         require(new BCryptPasswordEncoder().matches(password, text(user, "password_hash")), "当前密码不正确");
         requireOrdersFinished(user);
+        long customerId = number(user, "customer_id");
+        store.update("customer", customerId, map("closed_at", now()));
+        store.update("sys_user", id, map("enabled", false));
         store.insert("operation_log", map("operator", text(user, "name"), "action", "客户注销账号", "target", text(user, "username"), "created_at", now()));
-        store.delete("sys_user", id);
     }
     public void username(Map<String, Object> input, Long excludedId) {
         String username = required(input, "username", 30);

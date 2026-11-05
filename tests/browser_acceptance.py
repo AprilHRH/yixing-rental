@@ -73,6 +73,8 @@ def main():
                         launch['executable_path'] = browser_path
                     browser = playwright.chromium.launch(**launch)
                     context = browser.new_context(viewport={'width': 1440, 'height': 1080}, record_video_dir=str(ARTIFACTS / 'video'), record_video_size={'width': 1280, 'height': 960})
+                    # 公网普通 HTTP 不提供 randomUUID；本地也强制走同样的兼容分支。
+                    context.add_init_script("Object.defineProperty(Crypto.prototype, 'randomUUID', {value: undefined, configurable: true})")
                     page = context.new_page()
                     errors = []
                     page.on('pageerror', lambda error: errors.append(str(error)))
@@ -121,15 +123,34 @@ def main():
                     expect(dialog).not_to_be_visible()
                     drawer = page.locator('.el-drawer:visible')
                     expect(drawer.get_by_text('浏览器验收客户', exact=True)).to_be_visible()
+                    assert page.evaluate('typeof crypto.randomUUID') == 'undefined'
+                    results.append('模拟公网 HTTP 缺少 randomUUID，业务不能依赖 localhost 特有接口')
+                    # 缺押金时必须显示后端拦截原因，不能无提示或错误地交车。
+                    drawer.get_by_role('button', name='办理交车', exact=True).click()
+                    dialog = page.locator('.el-dialog:visible')
+                    with page.expect_response(lambda response: response.url.endswith('/pickup')) as rejected:
+                        dialog.get_by_role('button', name='确认保存').click()
+                    assert rejected.value.status == 400
+                    expect(page.locator('.el-message').filter(has_text='请先收齐押金')).to_be_visible()
+                    dialog.get_by_role('button', name='取消', exact=True).click()
+                    expect(drawer.locator('.order-detail-heading')).to_contain_text('待取车')
+                    results.append('未收押金交车显示后端原因，订单状态保持待取车')
                     drawer.get_by_role('button', name='登记收款', exact=True).click()
                     dialog = page.locator('.el-dialog:visible')
-                    dialog.get_by_role('button', name='确认保存').click()
+                    with page.expect_response(lambda response: response.url.endswith('/collect')) as collected:
+                        dialog.get_by_role('button', name='确认保存').click()
+                    assert collected.value.ok
+                    assert collected.value.request.post_data_json['request_id']
                     expect(dialog).not_to_be_visible()
                     drawer.get_by_role('button', name='办理交车', exact=True).click()
                     dialog = page.locator('.el-dialog:visible')
-                    dialog.get_by_role('button', name='确认保存').click()
+                    with page.expect_response(lambda response: response.url.endswith('/pickup')) as picked_up:
+                        dialog.get_by_role('button', name='确认保存').click()
+                    assert picked_up.value.ok
                     expect(dialog).not_to_be_visible()
                     expect(drawer.locator('.order-detail-heading')).to_contain_text('租赁中')
+                    page.screenshot(path=str(ARTIFACTS / 'http-collection-pickup-verified.png'), full_page=False)
+                    results.append('缺少 randomUUID 时登记收款和办理交车均发出真实请求并成功入库')
                     drawer.get_by_role('button', name='办理还车', exact=True).click()
                     dialog = page.locator('.el-dialog:visible')
                     dialog.get_by_label('还车里程（km）', exact=True).fill('120')
@@ -149,6 +170,34 @@ def main():
                     net = sum(payment['amount'] * (1 if payment['direction'] == 'IN' else -1) for payment in data['payments'] if payment['order_id'] == order['id'])
                     assert abs(net - order['actual_rent']) < .001
                     results.append('刷新后订单持久化、费用与流水一致')
+                    # 取消与结算也使用请求编号，补测同一兼容分支。
+                    headers = {'X-Requested-With': 'XMLHttpRequest'}
+                    draft = {key: order[key] for key in ['customer_id', 'vehicle_id', 'pickup_branch', 'return_branch', 'planned_start', 'planned_end', 'billing_mode', 'expected_mileage']}
+                    cancelled = page.request.post(BASE + '/api/orders', data=draft, headers=headers)
+                    assert cancelled.ok, cancelled.text()
+                    page.goto(BASE + '/#/orders?detail=' + str(cancelled.json()['id']), wait_until='networkidle')
+                    page.reload(wait_until='networkidle')
+                    drawer = page.locator('.el-drawer:visible')
+                    drawer.get_by_role('button', name='取消订单', exact=True).click()
+                    with page.expect_response(lambda response: response.url.endswith('/cancel')) as cancellation:
+                        page.get_by_role('button', name='已处理，确认', exact=True).click()
+                    assert cancellation.value.ok
+                    expect(drawer.locator('.order-detail-heading')).to_contain_text('已取消')
+                    results.append('缺少 randomUUID 时取消订单正常提交并更新状态')
+                    page.goto(BASE + '/#/orders', wait_until='networkidle')
+                    current = page.request.get(BASE + '/api/bootstrap').json()
+                    other_vehicle = next(car for car in current['vehicles'] if car['id'] != order['vehicle_id'] and car['status'] == 'AVAILABLE')
+                    start = datetime.now().replace(microsecond=0) + timedelta(days=20)
+                    external = page.request.post(BASE + '/api/orders', data={
+                        'customer_id': order['customer_id'], 'vehicle_id': other_vehicle['id'],
+                        'pickup_branch': other_vehicle['branch_id'], 'return_branch': other_vehicle['branch_id'],
+                        'planned_start': start.isoformat(), 'planned_end': (start + timedelta(days=2)).isoformat(),
+                        'billing_mode': 'DAILY', 'expected_mileage': 100,
+                    }, headers=headers)
+                    assert external.ok, external.text()
+                    external_order_no = external.json()['order_no']
+                    expect(page.get_by_text(external_order_no, exact=True)).to_be_visible(timeout=25000)
+                    results.append('另一个会话创建订单后，当前订单列表在15秒自动同步，无需手动刷新')
                     page.set_viewport_size({'width': 390, 'height': 844})
                     visit(page, '/', '工作台')
                     page.set_viewport_size({'width': 1440, 'height': 1080})

@@ -37,6 +37,7 @@ public class ApiController {
     @PostMapping("/customers") public Map<String, Object> customer(@RequestBody Map<String, Object> input) { return customers.create(input); }
     @PutMapping("/customers/{id}") public Map<String, Object> customer(@PathVariable long id, @RequestBody Map<String, Object> input) { return customers.save(id, input); }
     @GetMapping("/customers/accounts") public List<Map<String, Object>> customerAccounts() { return customers.accounts(); }
+    @GetMapping("/customers/closed") public List<Map<String, Object>> closedCustomers() { return customers.closedProfiles(); }
     @PostMapping("/customers/accounts") public Map<String, Object> customerAccount(@RequestBody Map<String, Object> input) {
         require("CUSTOMER".equals(text(input, "role")) && "CUSTOMER".equals(text(input, "account_type")), "此处仅管理客户账号");
         return system.user(null, input);

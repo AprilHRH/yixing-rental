@@ -55,6 +55,8 @@ public class SystemService {
                 customerId = number(customers.save(null, profile), "id");
             } else customerId = number(input, "customer_id");
             store.lock("customer", customerId);
+            Map<String, Object> profile = store.get("customer", customerId);
+            require(profile.get("closed_at") == null, "已注销客户账号不能重新启用");
             require(store.list("sys_user").stream().noneMatch(user -> user.get("customer_id") != null && number(user, "customer_id") == customerId && (id == null || number(user, "id") != id)), "该客户已有登录账号");
             data.put("customer_id", customerId);
             store.update("customer", customerId, map("name", data.get("name")));

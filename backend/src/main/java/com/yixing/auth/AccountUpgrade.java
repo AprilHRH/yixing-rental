@@ -20,6 +20,10 @@ public class AccountUpgrade implements ApplicationRunner {
         if (!columns.contains("customer_id")) jdbc.execute("ALTER TABLE sys_user ADD COLUMN customer_id BIGINT UNIQUE");
         if (!columns.contains("security_question")) jdbc.execute("ALTER TABLE sys_user ADD COLUMN security_question VARCHAR(100)");
         if (!columns.contains("security_answer_hash")) jdbc.execute("ALTER TABLE sys_user ADD COLUMN security_answer_hash VARCHAR(100)");
+        java.util.Set<String> customerColumns = new java.util.HashSet<>();
+        for (String column : jdbc.queryForRowSet("SELECT * FROM customer WHERE 1=0").getMetaData().getColumnNames()) customerColumns.add(column.toLowerCase());
+        if (!customerColumns.contains("closed_at")) jdbc.execute("ALTER TABLE customer ADD COLUMN closed_at VARCHAR(30)");
+        if (!customerColumns.contains("purged_at")) jdbc.execute("ALTER TABLE customer ADD COLUMN purged_at VARCHAR(30)");
         jdbc.update("UPDATE sys_user SET account_type='STAFF', role='ADMIN' WHERE role='STAFF'");
     }
 }

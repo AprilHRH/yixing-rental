@@ -32,6 +32,7 @@ class AccountRecoveryTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired PlatformTransactionManager manager;
     @Autowired com.yixing.auth.AccountService accounts;
+    @Autowired RetentionCleanup retention;
     MvcResult send(MockHttpServletRequestBuilder builder, MockHttpSession session, Map<String, Object> data) throws Exception {
         builder.header("X-Requested-With", "XMLHttpRequest").contentType("application/json").content(json.writeValueAsBytes(data));
         if (session != null) builder.session(session);
@@ -69,6 +70,53 @@ class AccountRecoveryTest {
             var session = login(username, "88888888", username.startsWith("customer") ? "CUSTOMER" : "ADMIN");
             var user = ok(mvc.perform(get("/api/auth/me").session(session)).andReturn());
             assertFalse(user.containsKey("password_hash")); assertFalse(user.containsKey("security_answer_hash"));
+        }
+    }
+    @Test void sevenDayCleanupPurgesCancelledAndExpiredBookingsAndErasesClosedCustomerIdentity() {
+        String token = UUID.randomUUID().toString().substring(0, 8);
+        String old = LocalDateTime.now().minusDays(9).withNano(0).toString();
+        Map<String, Object> erased = store.insert("customer", map("name", "注销后彻底清理", "identity_no", "PURGE-" + token,
+            "phone", "13800000000", "license_no", "PURGE-LICENSE", "license_expiry", "2035-12-31",
+            "category", "NORMAL", "restricted", false, "notes", "私密信息"));
+        seed.account("purge_" + token, "注销后彻底清理", "CUSTOMER", erased.get("id"));
+        store.update("customer", number(erased, "id"), map("closed_at", old));
+
+        Map<String, Object> historic = store.insert("customer", map("name", "注销后保留业务历史", "identity_no", "HISTORY-" + token,
+            "phone", "13800000001", "license_no", "HISTORY-LICENSE", "license_expiry", "2035-12-31",
+            "category", "NORMAL", "restricted", false, "notes", "应在七天后清除"));
+        seed.account("history_" + token, "注销后保留业务历史", "CUSTOMER", historic.get("id"));
+        store.update("customer", number(historic, "id"), map("closed_at", old));
+        var oldTime = old;
+        for (String status : List.of("CANCELLED", "RESERVED", "ACTIVE", "RETURNED", "COMPLETED")) {
+            Map<String, Object> order = store.insert("rental_order", map(
+                "order_no", "RET-" + token + "-" + status, "customer_id", historic.get("id"), "vehicle_id", 1,
+                "pickup_branch", 1, "return_branch", 1, "planned_start", oldTime, "planned_end", oldTime,
+                "expected_mileage", 100, "billing_mode", "DAILY", "daily_rate", 188, "monthly_rate", 3980,
+                "base_fee", 50, "mileage_rate", 2, "deposit", 1000, "estimated_rent", 188,
+                "actual_rent", status.equals("COMPLETED") ? 188 : null,
+                "status", status, "created_at", oldTime,
+                "cancelled_at", status.equals("CANCELLED") ? oldTime : null,
+                "completed_at", status.equals("COMPLETED") ? oldTime : null));
+            store.insert("payment_record", map("order_id", order.get("id"), "request_id", "RET-PAY-" + token + "-" + status,
+                "kind", "RENT", "direction", "IN", "amount", 10, "method", "测试", "created_at", oldTime, "operator", "测试"));
+        }
+
+        retention.cleanup(LocalDateTime.now().minusDays(7));
+
+        assertNull(store.list("customer").stream().filter(row -> number(row, "id") == number(erased, "id")).findFirst().orElse(null));
+        Map<String, Object> scrubbed = store.get("customer", number(historic, "id"));
+        assertEquals("已注销客户", scrubbed.get("name"));
+        assertTrue(text(scrubbed, "identity_no").startsWith("ERASED-"));
+        assertEquals("", scrubbed.get("phone"));
+        assertNotNull(scrubbed.get("purged_at"));
+        assertTrue(store.list("sys_user").stream().noneMatch(row -> Set.of("purge_" + token, "history_" + token).contains(text(row, "username"))));
+        for (String status : List.of("CANCELLED", "RESERVED")) {
+            String orderNo = "RET-" + token + "-" + status;
+            assertTrue(store.list("rental_order").stream().noneMatch(row -> orderNo.equals(text(row, "order_no"))));
+        }
+        for (String status : List.of("ACTIVE", "RETURNED", "COMPLETED")) {
+            String orderNo = "RET-" + token + "-" + status;
+            assertTrue(store.list("rental_order").stream().anyMatch(row -> orderNo.equals(text(row, "order_no"))));
         }
     }
     @Test void managementListsAreSeparatedAndCustomerRoutesCannotManageTeam() throws Exception {

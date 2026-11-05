@@ -296,7 +296,9 @@ python scripts/run.py --mysql --open
 | [frontend/src/main.js](frontend/src/main.js) | 启动 Vue、配置路由和登录跳转、导入组件库和全局样式。 |
 | [frontend/src/App.vue](frontend/src/App.vue) | 整体页面外壳、侧栏、顶栏、用户菜单和初始业务数据加载。 |
 | [frontend/src/api.js](frontend/src/api.js) | Axios 请求封装、错误提示、会话过期通知、文件下载和 CSV 导出。 |
+| [frontend/src/requestId.js](frontend/src/requestId.js) | 收款、交还车、取消和结算的操作编号；兼容普通 HTTP 不提供 `randomUUID` 的浏览器环境。 |
 | [frontend/src/store.js](frontend/src/store.js) | 各页面共享的响应式业务数据、刷新方法、状态名称和日期金额显示。 |
+| [backend/src/main/java/com/yixing/data/RetentionCleanup.java](backend/src/main/java/com/yixing/data/RetentionCleanup.java) | 每日清理七天前的已取消订单、过期未取预约及注销客户身份资料，保留在租、待结算和已完成业务记录。 |
 | [frontend/src/dashboard.js](frontend/src/dashboard.js) | 工作台日期范围、今日交还车、车辆分类、待办排序等纯逻辑。 |
 | [frontend/vite.config.js](frontend/vite.config.js) | 开发和预览端口，`/api` 与 `/uploads` 的后端代理，以及构建分包。 |
 | [frontend/package.json](frontend/package.json) | 前端依赖及开发、测试、构建、预览命令。 |
@@ -309,8 +311,8 @@ python scripts/run.py --mysql --open
 | 登录注册 | [frontend/src/views/Login.vue](frontend/src/views/Login.vue) | 管理端/客户端切换、登录、客户注册及登录页局部样式。 |
 | 工作台 | [frontend/src/views/Dashboard.vue](frontend/src/views/Dashboard.vue) | 经营概览、今日交还车、业务待办、状态与收入图表。 |
 | 车辆管理 | [frontend/src/views/Vehicles.vue](frontend/src/views/Vehicles.vue) | 车辆卡片/列表、筛选、建档、编辑、详情和启停。 |
-| 客户管理 | [frontend/src/views/Customers.vue](frontend/src/views/Customers.vue) | 客户建档与账号关联、资料和登录身份维护、租赁限制、历史记录及密码重置工单审核。 |
-| 租赁订单 | [frontend/src/views/Orders.vue](frontend/src/views/Orders.vue) | 预约表单、报价、订单详情和收款、交还车、结算操作。 |
+| 客户管理 | [frontend/src/views/Customers.vue](frontend/src/views/Customers.vue) | 客户建档与账号关联、注销客户七天保留区、资料维护、租赁限制、历史记录及密码重置工单审核。 |
+| 租赁订单 | [frontend/src/views/Orders.vue](frontend/src/views/Orders.vue) | 办理中、已取消、逾期未取和全部订单分栏，预约、报价及收款、交还车、结算操作。 |
 | 租金试算 | [frontend/src/views/Pricing.vue](frontend/src/views/Pricing.vue) | 三种计费输入切换和后端试算结果展示。 |
 | 车辆调度 | [frontend/src/views/Dispatch.vue](frontend/src/views/Dispatch.vue) | 门店运力、调度创建、开始、到达和取消。 |
 | 维修保养 | [frontend/src/views/Maintenance.vue](frontend/src/views/Maintenance.vue) | 提醒、工单、新建和完工登记。 |
@@ -373,8 +375,9 @@ python scripts/run.py --mysql --open
 | [backend/src/test/java/com/yixing/RentalWorkflowTest.java](backend/src/test/java/com/yixing/RentalWorkflowTest.java) | 租赁闭环、冲突、收退款及关联业务。 |
 | [backend/src/test/java/com/yixing/CustomerPortalTest.java](backend/src/test/java/com/yixing/CustomerPortalTest.java) | 客户注册、本人数据隔离、预约和权限。 |
 | [backend/src/test/java/com/yixing/AccountLifecycleTest.java](backend/src/test/java/com/yixing/AccountLifecycleTest.java) | 三类账号创建编辑删除、客户注销、密码及会话、事务回滚、档案与历史记录保留、最后一个管理员保护。 |
-| [backend/src/test/java/com/yixing/AccountRecoveryTest.java](backend/src/test/java/com/yixing/AccountRecoveryTest.java) | 初始化数量、账号分流、建档原子性、密保哈希、找回与人工核验、限速、会话失效、维护清空及正常重启保护。 |
+| [backend/src/test/java/com/yixing/AccountRecoveryTest.java](backend/src/test/java/com/yixing/AccountRecoveryTest.java) | 初始化数量、账号分流、密保找回与人工核验、七天清理及身份擦除、会话失效和正常重启保护。 |
 | [frontend/src/dashboard.test.js](frontend/src/dashboard.test.js) | 待办与车辆分类逻辑、车型参考图和图片回退。 |
+| [frontend/src/requestId.test.js](frontend/src/requestId.test.js) | 原生和 HTTP 兼容编号、唯一性、格式与浏览器能力缺失时的报错。 |
 | [tests/test_launcher.py](tests/test_launcher.py) | 启动器环境、服务复用、端口冲突、构建和停止逻辑的单元测试。 |
 | [tests/browser_acceptance.py](tests/browser_acceptance.py) | 启动隔离服务，验收八个业务模块和租赁流程。 |
 | [tests/dashboard_acceptance.py](tests/dashboard_acceptance.py) | 浏览器验收中的工作台检查。 |
@@ -432,12 +435,13 @@ python scripts/run.py --mysql --open
 | 认证 | `POST /api/auth/register` | 仅客户注册，传账号、姓名、电话、证件、驾照及 `security_question`、`security_answer`。 |
 | 认证 | `GET /api/auth/me`、`POST /api/auth/logout` | 查询登录身份、退出。 |
 | 认证 | `POST /api/auth/password` | 传 `old_password`、`new_password`，修改后退出。 |
-| 认证 | `DELETE /api/auth/account` | 客户传当前 `password` 和 `confirmation=CLOSE` 注销本人账号，未完成订单会拦截；其他登录会话失效。 |
+| 认证 | `DELETE /api/auth/account` | 客户传当前 `password` 和 `confirmation=CLOSE` 注销本人账号，立即停用登录并移入注销保留区；七天后清除身份信息，保留已完成订单的匿名关联；其他登录会话失效。 |
 | 密保 | `POST /api/auth/security` | 客户传当前 `password`、问题代码 `security_question` 和答案 `security_answer`；修改已有密保还需 `old_security_answer`。 |
 | 找回 | `POST /api/auth/recovery/question`、`POST /api/auth/recovery/password` | 匿名客户查询问题；传账号、密保答案和 `new_password` 找回密码，仅适用于启用的客户账号。 |
 | 工单 | `POST /api/auth/recovery/tickets` | 匿名提交账号、档案电话/证件号及原因，匹配后创建唯一待核验工单；不自动重置密码。 |
 | 工单 | `GET /api/customers/reset-tickets`、`POST /api/customers/reset-tickets/{id}/review` | 管理端查询和审核；传 `action=APPROVE/REJECT`、`review_notes`，批准还需 `verified=true`；已处理工单不能再次重置。 |
 | 客户账号 | `GET/POST /api/customers/accounts`、`PUT/DELETE /api/customers/accounts/{id}` | 客户登录身份查询、开通、编辑、删除；不支持在编辑中直接重置客户密码。 |
+| 注销客户 | `GET /api/customers/closed` | 查看七天保留期内的注销客户；期限后清除身份信息并从列表移除。 |
 | 管理端数据 | `GET /api/bootstrap`、`GET /api/dashboard` | 业务基础数据和工作台统计。 |
 | 图片 | `POST /api/uploads`、`GET /uploads/{name}` | 上传表单字段 `file`，只接收 5 MB 以内有效 PNG/JPEG；读取图片需要登录。 |
 | 车辆 | `POST /api/vehicles`、`PUT /api/vehicles/{id}` | 新增、编辑车辆档案。 |
@@ -544,6 +548,8 @@ python tests/browser_acceptance.py
 ```
 
 普通浏览器验收使用隔离的 18081 后端、15174 前端和测试数据库，可用 `BROWSER_BACKEND_PORT`、`BROWSER_FRONTEND_PORT` 环境变量更换，要求对应端口空闲、后端 JAR 已构建。截图、录屏和结果写入 `data/test-artifacts/browser/`。如需 MySQL 浏览器闭环，执行：
+
+该验收会禁用浏览器的 `randomUUID`，强制覆盖普通 HTTP 的兼容路径，实际提交收款、交车、还车、结算与取消，并检查未收押金时的提示和状态保护。
 
 ```powershell
 python scripts/test_mysql.py --browser

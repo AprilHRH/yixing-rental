@@ -21,6 +21,11 @@ public class CustomerService {
         access.admin();
         return store.list("sys_user").stream().filter(user -> "CUSTOMER".equals(text(user, "role"))).map(AuthController::publicUser).toList();
     }
+    public List<Map<String, Object>> closedProfiles() {
+        access.admin();
+        return store.list("customer").stream()
+            .filter(customer -> customer.get("closed_at") != null && customer.get("purged_at") == null).toList();
+    }
     @Transactional
     public Map<String, Object> create(Map<String, Object> input) {
         accounts.lockAccounts();
@@ -44,6 +49,7 @@ public class CustomerService {
         require(Set.of("NORMAL", "VIP").contains(text(input, "category")), "客户分类不正确");
         require(text(input, "notes").length() <= 500, "备注最多 500 字");
         if (id != null) store.lock("customer", id);
+        if (id != null) require(store.get("customer", id).get("closed_at") == null, "已注销客户资料不可编辑");
         Map<String, Object> result = id == null ? store.insert("customer", data) : store.update("customer", id, data);
         if (id != null) store.list("sys_user").stream().filter(user -> user.get("customer_id") != null && number(user, "customer_id") == id)
             .forEach(user -> store.update("sys_user", number(user, "id"), map("name", result.get("name"))));
@@ -51,6 +57,7 @@ public class CustomerService {
     }
     public void eligible(Map<String, Object> customer, LocalDate endDate) {
         // 驾驶证不仅今天要有效，还必须覆盖计划还车日；限制租赁的客户不能下单或取车。
+        require(customer.get("closed_at") == null, "已注销客户不能办理租赁");
         require(!flag(customer, "restricted"), "该客户已被限制租赁");
         require(!date(customer, "license_expiry").isBefore(endDate) && !date(customer, "license_expiry").isBefore(LocalDate.now()), "驾驶证已过期或无法覆盖租期");
     }

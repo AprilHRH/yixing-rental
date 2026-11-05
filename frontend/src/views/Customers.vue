@@ -7,20 +7,26 @@ import { state, refresh, vehicle, mask, labels, dateText, today, overdue } from 
 import FormDialog from '../components/FormDialog.vue'
 import StatusTag from '../components/StatusTag.vue'
 import VehicleIdentity from '../components/VehicleIdentity.vue'
-const tab = ref('profiles'), accounts = ref([]), tickets = ref([]), ticketStatus = ref('PENDING')
+const tab = ref('profiles'), accounts = ref([]), tickets = ref([]), closedProfiles = ref([]), ticketStatus = ref('PENDING')
 const query = reactive({ search: '', category: '', restricted: '' }), page = ref(1), open = ref(false), detail = ref(null), edit = ref(null), initial = ref({}), busy = ref(false)
 const accountOpen = ref(false), accountCustomer = ref(null), accountInitial = ref({}), reviewOpen = ref(false), selectedTicket = ref(null), reviewForm = reactive({ action: 'APPROVE', verified: false, review_notes: '' }), reviewRef = ref(null)
 const account = id => accounts.value.find(user => user.customer_id === id)
 const pending = computed(() => tickets.value.filter(ticket => ticket.status === 'PENDING').length)
 const visibleTickets = computed(() => tickets.value.filter(ticket => !ticketStatus.value || ticket.status === ticketStatus.value))
 const ticketLabels = { PENDING: '待核验', RESOLVED: '已重置', REJECTED: '已驳回' }
-async function load() { try { [accounts.value, tickets.value] = await Promise.all([api.get('/customers/accounts'), api.get('/customers/reset-tickets')]) } catch {} }
+async function load() { try { [accounts.value, tickets.value, closedProfiles.value] = await Promise.all([api.get('/customers/accounts'), api.get('/customers/reset-tickets'), api.get('/customers/closed')]) } catch {} }
 async function reload() { await Promise.all([refresh(), load()]) }
 onMounted(load)
+watch(() => state.updatedAt, load)
 const filtered = computed(() => state.customers.filter(item => {
   const keyword = query.search.trim().toLowerCase()
-  return (!keyword || `${item.name} ${item.phone} ${account(item.id)?.username || ''}`.toLowerCase().includes(keyword)) && (!query.category || item.category === query.category) && (query.restricted === '' || query.restricted == null || item.restricted === query.restricted)
+  return !item.closed_at && (!keyword || `${item.name} ${item.phone} ${account(item.id)?.username || ''}`.toLowerCase().includes(keyword)) && (!query.category || item.category === query.category) && (query.restricted === '' || query.restricted == null || item.restricted === query.restricted)
 }))
+const visibleClosedProfiles = computed(() => closedProfiles.value.filter(item => {
+  const keyword = query.search.trim().toLowerCase()
+  return !keyword || `${item.name} ${item.phone} ${account(item.id)?.username || ''}`.toLowerCase().includes(keyword)
+}))
+const daysLeft = value => Math.max(0, 7 - Math.floor((Date.now() - new Date(value).getTime()) / 86400000))
 watch(query, () => page.value = 1)
 const fields = computed(() => [
   { key: 'name', label: '客户姓名' }, { key: 'phone', label: '联系电话', maxlength: 20 },
@@ -86,10 +92,10 @@ const credit = computed(() => ({ overdue: history.value.filter(order => overdue(
 
 <template>
   <div class="module-overview">
-    <div><strong>{{ state.customers.length }}</strong><span>客户档案</span></div>
+    <div><strong>{{ filtered.length }}</strong><span>正常客户档案</span></div>
     <div><strong class="text-accent">{{ accounts.length }}</strong><span>客户登录账号</span></div>
     <div><strong>{{ pending }}</strong><span>待核验重置工单</span></div>
-    <div><strong>{{ state.customers.filter(item => item.restricted).length }}</strong><span>限制租赁</span></div>
+    <div><strong>{{ state.customers.filter(item => !item.closed_at && item.restricted).length }}</strong><span>限制租赁</span></div>
     <el-button type="primary" :icon="Plus" @click="create()">新增客户</el-button>
   </div>
   <section class="panel listing-panel">
@@ -111,6 +117,16 @@ const credit = computed(() => ({ overdue: history.value.filter(order => overdue(
           <el-table-column label="操作" width="185" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="detail = row">详情</el-button><el-button link type="primary" @click="create(row)">编辑</el-button><el-button link type="primary" :icon="Key" @click="manageAccount(row)">账号</el-button></template></el-table-column>
         </el-table>
         <div class="pagination"><span>共 {{ filtered.length }} 位客户</span><el-pagination v-model:current-page="page" :page-size="10" :total="filtered.length" layout="prev, pager, next"/></div>
+      </el-tab-pane>
+      <el-tab-pane :label="`已注销（${closedProfiles.length}）`" name="closed">
+        <div class="filter-bar"><el-input v-model="query.search" :prefix-icon="Search" placeholder="搜索注销客户" clearable class="search-input"/><span class="filter-spacer"></span><el-button @click="load">刷新</el-button></div>
+        <el-table :data="visibleClosedProfiles" empty-text="暂无处于七天保留期的注销客户">
+          <el-table-column prop="name" label="客户" min-width="150"/>
+          <el-table-column label="账号" min-width="140"><template #default="{ row }">{{ account(row.id)?.username || '已停用' }}</template></el-table-column>
+          <el-table-column label="注销时间" min-width="175"><template #default="{ row }">{{ dateText(row.closed_at) }}</template></el-table-column>
+          <el-table-column label="清理时间" min-width="150"><template #default="{ row }">{{ daysLeft(row.closed_at) }} 天后</template></el-table-column>
+          <el-table-column label="个人资料" min-width="230"><template #default="{ row }">{{ row.purged_at ? '已清除，订单审计记录保留' : '保留至七天后清除' }}</template></el-table-column>
+        </el-table>
       </el-tab-pane>
       <el-tab-pane :label="`密码重置工单（${pending}）`" name="tickets">
         <div class="filter-bar"><el-select v-model="ticketStatus" placeholder="全部状态" clearable><el-option v-for="(label, value) in ticketLabels" :key="value" :value="value" :label="label"/></el-select><span class="filter-spacer"></span><el-button @click="load">刷新工单</el-button></div>

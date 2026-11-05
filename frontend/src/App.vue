@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Odometer, Van, User, Tickets, Wallet, Connection, Tools, DataAnalysis, Setting, ArrowRight, Refresh, SwitchButton, Lock, Bell } from '@element-plus/icons-vue'
@@ -28,8 +28,27 @@ const visibleModules = computed(() => customerMode.value ? [{ path: '/portal', l
 const date = computed(() => new Date(state.updatedAt || Date.now()).toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }))
 const pendingOrders = computed(() => state.orders.filter(order => ['RESERVED', 'RETURNED'].includes(order.status)).length)
 const hasDemo = computed(() => state.orders.some(order => order.order_no?.startsWith('YX-DEMO-')))
-async function load() { if (state.user) { try { await refresh(); ready.value = true } catch { ready.value = false } } }
+let syncing = false
+async function load() {
+  if (!state.user || syncing) return
+  syncing = true
+  try { await refresh(); ready.value = true } catch { ready.value = false } finally { syncing = false }
+}
 onMounted(load)
+let syncTimer
+onMounted(() => {
+  syncTimer = window.setInterval(() => {
+    if (state.user && document.visibilityState === 'visible' && Date.now() - (state.updatedAt || 0) >= 10000) load()
+  }, 15000)
+  document.addEventListener('visibilitychange', syncWhenVisible)
+})
+function syncWhenVisible() {
+  if (document.visibilityState === 'visible' && state.user && Date.now() - (state.updatedAt || 0) >= 5000) load()
+}
+onUnmounted(() => {
+  window.clearInterval(syncTimer)
+  document.removeEventListener('visibilitychange', syncWhenVisible)
+})
 // 登录或退出后重新判断是否加载业务数据，加载成功才显示内部页面。
 watch(() => state.user?.id, value => { if (value) load(); else ready.value = false })
 async function logout() { await api.post('/auth/logout'); state.user = null; router.push('/login') }

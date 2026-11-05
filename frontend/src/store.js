@@ -11,6 +11,7 @@ export async function refresh() {
 }
 export const vehicle = id => state.vehicles.find(item => Number(item.id) === Number(id)) || {}
 export const customer = id => state.customers.find(item => Number(item.id) === Number(id)) || {}
+export const customerName = id => customer(id).name || '已注销客户'
 export const branch = id => state.branches.find(item => Number(item.id) === Number(id)) || {}
 export const rule = id => state.pricing.find(item => Number(item.id) === Number(id)) || {}
 export const payments = id => state.payments.filter(item => Number(item.order_id) === Number(id))

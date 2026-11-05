@@ -66,12 +66,12 @@ async function saveProfile() {
   <template v-else>
     <section class="panel customer-profile"><div class="panel-heading"><div><h3>个人资料</h3><p>证件号：{{ mask(profile.identity_no) }} · 修改身份证信息请联系管理员</p></div><span class="soft-label">{{ labels[profile.category] }}</span></div><el-form ref="profileRef" :model="profile" class="form-grid" label-position="top"><el-form-item label="姓名" prop="name" :rules="required('姓名')"><el-input v-model="profile.name" maxlength="60"/></el-form-item><el-form-item label="手机号" prop="phone" :rules="required('手机号')"><el-input v-model="profile.phone" maxlength="20"/></el-form-item><el-form-item label="驾驶证号" prop="license_no" :rules="required('驾驶证号')"><el-input v-model="profile.license_no" maxlength="80"/></el-form-item><el-form-item label="驾驶证有效期至" prop="license_expiry" :rules="required('驾驶证有效期')"><el-date-picker v-model="profile.license_expiry" type="date" value-format="YYYY-MM-DD"/></el-form-item><div class="full-width"><el-button type="primary" :loading="busy" @click="saveProfile">保存个人资料</el-button></div></el-form></section>
     <section class="account-closure-section">
-      <div><h3>注销账号</h3><p>注销后无法再登录。客户档案、历史订单和收退款记录将继续保留。</p><p v-if="unfinished" class="text-danger">请先取消待取车预约，或联系门店完成还车和结算。</p></div>
+      <div><h3>注销账号</h3><p>注销后无法再登录。个人资料保留 7 天后清除，已完成订单保留去身份化记录。</p><p v-if="unfinished" class="text-danger">请先取消待取车预约，或联系门店完成还车和结算。</p></div>
       <el-button type="danger" plain :icon="Delete" :disabled="unfinished || busy" @click="openClosure">注销账号</el-button>
     </section>
   </template>
   <el-dialog v-model="closing" title="确认注销账号" width="460px" :close-on-click-modal="false" :close-on-press-escape="!busy" :show-close="!busy">
-    <p>账号注销后不能恢复登录。历史业务记录保留；如需重新开通，请联系管理员。</p>
+    <p>账号注销后不能恢复登录。个人资料将在 7 天后清除，已完成订单仅保留去身份化记录。</p>
     <el-form label-position="top" @submit.prevent="closeAccount">
       <el-form-item label="当前登录密码"><el-input v-model="closeForm.password" type="password" show-password autocomplete="current-password" maxlength="64"/></el-form-item>
       <el-checkbox v-model="closeForm.confirmed">我已了解并确认注销此账号</el-checkbox>
